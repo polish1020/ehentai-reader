@@ -58,3 +58,21 @@ test('authentication errors and canceled navigation do not trigger fallback; lat
     throw new Error('Latest unavailable');
   }}),/Latest unavailable/);
 });
+
+test('empty or unavailable popularity is reported before loading latest, including when latest fails',async()=>{
+  for(const unavailable of [false,true]) {
+    const events=[];
+    await assert.rejects(discoveryPage({categories,onFallback:reason=>events.push(reason),load:async feed=>{
+      events.push(feed);
+      if(feed==='popular') {
+        if(unavailable)throw new Error('Popular unavailable');
+        return {galleries:[],next:null};
+      }
+      assert.deepEqual(events,['popular',unavailable?'unavailable':'empty','latest']);
+      throw new Error('Latest unavailable');
+    }}),/Latest unavailable/);
+  }
+  let reported=false;
+  await discoveryPage({categories,onFallback:()=>{reported=true;},load:async()=>({galleries:[gallery('popular')],next:null})});
+  assert.equal(reported,false);
+});

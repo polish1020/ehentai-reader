@@ -106,6 +106,29 @@ function filtered() {
   if (q && localCollection(list)) items = items.filter(g => [g.title,g.creator,...g.tags].join(' ').toLowerCase().includes(q));
   return items.sort((a,b) => collectionView(list) === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : list.sort === 'source' ? 0 : list.sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : list.sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
 }
+const listLoading=()=>'<div class="loading list-loading" role="status" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span><span>正在获取实时图集…</span></div>';
+const regularDivider=()=>'<div class="regular-divider" role="separator" aria-label="以下为常规图集"><span>以下为常规图集</span></div>';
+function rankPlaceholder(title,message) {
+  return `<div class="rank-placeholder" role="status"><h2>${escape(title)}</h2><p>${escape(message)}</p></div>`;
+}
+function discoveryContent(items) {
+  if (!state.categories.length) return null;
+  if (popularFeed(list)) {
+    const ordinary=list.discoveryLatest || list.pendingAppend && list.discoveryContinuation;
+    const ids=new Set(list.popularIds||[]),ranked=items.filter(gallery=>ids.has(gallery.id)),regular=items.filter(gallery=>!ids.has(gallery.id));
+    if (!ids.size && !ordinary) return null;
+    const missing=!ranked.length ? list.discoveryFallback==='unavailable'
+      ? rankPlaceholder('热门榜暂时不可用','以下先展示常规图集，可稍后刷新重试热门榜。')
+      : rankPlaceholder('当前筛选下暂无热门图集','可调整全局分类或筛选条件，以下继续浏览常规图集。') : '';
+    const remainder=ordinary ? regular.length ? regular.map(card).join('') : list.isLoading ? listLoading() : !list.listError ? '<p class="regular-empty">暂无符合条件的常规图集。</p>' : '' : '';
+    return ranked.map(card).join('')+missing+(ordinary?regularDivider()+remainder:'');
+  }
+  if (rankingFeed(list) && !items.length && !list.isLoading && !list.listError) {
+    const name=feeds.find(([id])=>id===feedFor(list))?.[1]||'榜单';
+    return rankPlaceholder(`${name}暂无符合条件的图集`,list.nextCursor?'本页没有匹配结果，继续上滑查看后续排名，或调整筛选条件。':'当前分类或筛选条件下没有榜单结果，可调整筛选或切换其他榜单。')+'<hr class="rank-empty-divider">';
+  }
+  return null;
+}
 function renderResults() {
   if (!$('#gallery-grid')) return;
   $('#listing-title').textContent = route()==='search' ? '搜索结果' : (searchOptions(list.query,list.filters).query || list.filters?.f_shash) && !localCollection(list) ? '搜索结果' : popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '热门与最新' : '最新图集' : '源站热门' : route()==='discover' ? (feeds.find(([id])=>id===feedFor(list))?.[1]||'发现') : pageNames[route()];
@@ -120,7 +143,7 @@ function renderResults() {
   $('#gallery-grid').className = `grid ${list.listMode ? 'list-mode' : ''}`;
   const emptyMessages = {favorites:['还没有收藏','点击图集右上角的爱心，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
   const [title, message] = route()==='search' && !searchReady(list) ? ['搜索图集','输入关键词，或在筛选中使用高级搜索与以图搜图。'] : !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : rankingFeed(list) && list.nextCursor ? ['本页暂无符合筛选的图集','可继续加载后面的排名，或调整全局分类和筛选条件。'] : list.query || route()==='search' && searchReady(list) || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[collectionView(list)] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
-  $('#gallery-grid').innerHTML = items.length ? items.map(card).join('') : list.isLoading ? '<div class="loading list-loading" role="status" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span><span>正在获取实时图集…</span></div>' : list.listError ? '' : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">${icons[route()]}</div><h3>${title}</h3><p>${message}</p></div>`;
+  $('#gallery-grid').innerHTML = discoveryContent(items) ?? (items.length ? items.map(card).join('') : list.isLoading ? listLoading() : list.listError ? '' : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">${icons[route()]}</div><h3>${title}</h3><p>${message}</p></div>`);
   const more=!!list.nextCursor || popularFeed(list)&&list.discoveryContinuation;
   $('#list-status').innerHTML=list.listError?`<div class="empty"><p role="alert">${escape(list.listError)}</p><button class="outline-button" data-action="retry-list">重试</button></div>`:more?`<div class="load-sentinel" data-loading="${list.isLoading}" role="status" aria-live="polite">${list.isLoading?'正在加载…':'上滑加载更多'}</div>`:items.length&&!list.isLoading?'<span class="list-end">已经到底了</span>':'';
   listLoader.watch($('#list-status .load-sentinel'),list.key);
@@ -171,7 +194,11 @@ async function loadGalleries(append=false,target=list) {
             const details = new Map((await metadata(listing.ids,source)).map(gallery => [gallery.gid,gallery]));
             return {galleries:listing.ids.map(([gid]) => details.get(gid)).filter(gallery=>gallery && accepts(gallery,target.filters,state.tagPreferences)),next:listing.next};
           };
-          data = discovery ? await discoveryPage({load,append,cursor,categories:selected,seen:target.galleries.map(gallery => gallery.id)}) : await load(options.params.f_shash || search.trim() && !['watched','favorites'].includes(feed) ? 'latest' : feed,cursor);
+          data = discovery ? await discoveryPage({load,append,cursor,categories:selected,seen:target.galleries.map(gallery => gallery.id),onFallback:fallback=>{
+            if(request!==target.requestId)return;
+            target.discoveryFallback=fallback;target.discoveryLatest=true;target.popularIds=[];
+            if(target===list)renderResults();lists.save();
+          }}) : await load(options.params.f_shash || search.trim() && !['watched','favorites'].includes(feed) ? 'latest' : feed,cursor);
         }
       }
       if (request !== target.requestId) return;

@@ -1,4 +1,4 @@
-export async function discoveryPage({load,append=false,cursor=null,categories,seen=[]}) {
+export async function discoveryPage({load,append=false,cursor=null,categories,seen=[],onFallback=()=>{}}) {
   const visible=page=>page.galleries.filter(gallery=>categories.includes(gallery.category));
   let fallback;
   if (!append) {
@@ -11,6 +11,7 @@ export async function discoveryPage({load,append=false,cursor=null,categories,se
       fallback='unavailable';
     }
   }
+  if (fallback) onFallback(fallback);
   const known=new Set(seen);
   // Skip pages containing only already shown popular entries, with bounded requests.
   for (let attempt=0;attempt<3;attempt++) {
