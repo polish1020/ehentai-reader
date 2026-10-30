@@ -19,6 +19,9 @@ export class ListStore {
             Object.assign(list,{discoveryVersion:2,discoveryContinuation:popular && !!list.galleries.length,discoveryLatest:false,popularIds:popular ? list.galleries.map(gallery=>gallery.id) : []});
             if (popular && !list.galleries.length) list.initialized=false;
           }
+          if (list.source==='exhentai' && ['yesterday','month','year','all'].includes(list.feed) && /ExHentai.*404/.test(list.listError||'')) {
+            list.initialized=false;list.isLoading=false;list.listError='';
+          }
           this.lists.set(list.key,list);
         }
       }

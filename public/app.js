@@ -1,10 +1,11 @@
 import {metadata,getGallery,galleryWithPages,galleryReference,setExScope,thumbnailSource} from './source.mjs';
 import {categories,excludedCategories,tagQuery} from './filters.mjs';
 import {ListStore} from './navigation.mjs';
-import {ReaderPreloader,preloadNeighbors,readerPreference} from './reader-preload.mjs';
+import {ReaderPreloader,preloadNeighbors} from './reader-preload.mjs';
 import {ThumbnailStore,ThumbnailView} from './photo-thumbnails.mjs';
 import {PhotoViewer} from './photo-viewer.mjs';
 import {discoveryPage} from './discovery.mjs';
+import {InfiniteList} from './list-loader.mjs';
 import {SourceFeatures} from './source-features.mjs';
 import {feeds,feedFor,searchOptions,accepts,quickTags} from './source-options.mjs';
 import {icon,decorateIcons} from './icons.mjs';
@@ -16,13 +17,14 @@ document.addEventListener('pointerdown',() => { delete document.documentElement.
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const names = {discover:'发现', favorites:'收藏', history:'足迹', library:'全部图集'};
-const icons = {discover:icon('discover'), favorites:icon('heart'), history:icon('clock'), library:icon('grid')};
+const pageNames={...names,search:'搜索'};
+const icons = {search:icon('search'),discover:icon('discover'), favorites:icon('heart'), history:icon('clock'), library:icon('grid')};
 let state;
 try { state = JSON.parse(localStorage.getItem('yijing-v1')) || {}; } catch { state = {}; }
 if (!state || typeof state !== 'object' || Array.isArray(state)) state = {};
 state.favorites = Array.isArray(state.favorites) ? state.favorites.filter(id => typeof id === 'string') : [];
 state.progress = state.progress && typeof state.progress === 'object' && !Array.isArray(state.progress) ? state.progress : {};
-state.mode = readerPreference(state);
+state.mode = 'scroll';
 state.direction = state.direction === 'rtl' ? 'rtl' : 'ltr';
 state.theme = ['light','dark','system'].includes(state.theme) ? state.theme : 'system';
 state.categories = Array.isArray(state.categories) ? categories.map(category => category.name).filter(name => state.categories.includes(name)) : categories.map(category => category.name);
@@ -32,8 +34,11 @@ let exSession = {configured:false,scope:null}, authRequest = 0;
 let authQueue = Promise.resolve();
 const sourceName = source => source === 'exhentai' ? 'ExHentai' : 'E-Hentai';
 const popularFeed = target => target.view === 'discover' && feedFor(target)==='popular' && !searchOptions(target.query,target.filters).query && !target.filters?.f_shash;
+const rankingFeed = target => target.view==='discover' && ['yesterday','month','year','all'].includes(feedFor(target)) && !searchOptions(target.query,target.filters).query && !target.filters?.f_shash;
 const accountList = target => feedFor(target)==='watched' || feedFor(target)==='favorites';
-const localCollection = target => target.view==='history' || target.view==='favorites' && target.favoriteMode!=='source';
+const collectionView = target => target.view==='search' ? target.searchScope || 'search' : target.view;
+const localCollection = target => collectionView(target)==='history' || collectionView(target)==='favorites' && target.favoriteMode!=='source';
+const searchReady = target => !!searchOptions(target.query,target.filters).query || Object.entries(target.filters||{}).some(([key,value])=>key!=='favcat'&&!!value);
 const knownGalleries = new Map(), thumbnailStores = new Map();
 let detailThumbnails, photoRequest = 0;
 let session;
@@ -81,37 +86,42 @@ function progressFor(gallery) {
   return p && Number.isInteger(p.page) ? Math.max(0, Math.min(pageCount(gallery) - 1, p.page)) : 0;
 }
 function nav() {
-  const html = Object.entries(names).map(([key, value]) => `<a href="#${key}" class="nav-link ${route() === key ? 'active' : ''}" ${route() === key ? 'aria-current="page"' : ''}><span class="nav-icon" aria-hidden="true">${icons[key]}</span>${value}</a>`).join('');
-  $('#desktop-nav').innerHTML = html; $('#mobile-nav').innerHTML = html; $('#breadcrumb').textContent = names[route()];
+  const selected=route()==='search' ? list.searchOrigin || 'library' : route();
+  const html = Object.entries(names).map(([key, value]) => `<a href="#${key}" class="nav-link ${selected === key ? 'active' : ''}" ${selected === key ? 'aria-current="page"' : ''}><span class="nav-icon" aria-hidden="true">${icons[key]}</span>${value}</a>`).join('');
+  $('#desktop-nav').innerHTML = html; $('#mobile-nav').innerHTML = html; $('#breadcrumb').textContent = pageNames[route()];
 }
 function card(g) {
   const p = state.progress[g.id], percent = p ? Math.round((progressFor(g) + 1) / pageCount(g) * 100) : 0;
   return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${pageCount(g)} P</span></div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div><div class="card-tags">${g.tags.slice(0,3).map(tag => `<span ${tagAttributes(tag)}>${escape(tag)}</span>`).join('')}</div>${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button><button class="favorite-button" data-favorite="${escape(g.id)}" aria-label="收藏 ${escape(g.title)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥' : '♡'}</button></article>`;
 }
 function filtered() {
+  if(list.view==='search'&&!searchReady(list))return [];
   if (localCollection(list)) {
-    const ids = route() === 'favorites' ? state.favorites : Object.keys(state.progress);
+    const ids = collectionView(list) === 'favorites' ? state.favorites : Object.keys(state.progress);
     const known = ids.map(id => knownGalleries.get(id)).filter(g => g?.source === list.source);
     list.galleries = [...new Map([...list.galleries,...known].map(g => [g.id,g])).values()];
   }
-  let items = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category) && accepts(g,list.filters,state.tagPreferences) && (route() !== 'favorites' || list.favoriteMode==='source' || state.favorites.includes(g.id)) && (route() !== 'history' || state.progress[g.id]));
+  let items = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category) && accepts(g,list.filters,state.tagPreferences) && (collectionView(list) !== 'favorites' || list.favoriteMode==='source' || state.favorites.includes(g.id)) && (collectionView(list) !== 'history' || state.progress[g.id]));
   const q = list.query.trim().toLowerCase();
   if (q && localCollection(list)) items = items.filter(g => [g.title,g.creator,...g.tags].join(' ').toLowerCase().includes(q));
-  return items.sort((a,b) => route() === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : list.sort === 'source' ? 0 : list.sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : list.sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
+  return items.sort((a,b) => collectionView(list) === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : list.sort === 'source' ? 0 : list.sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : list.sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
 }
 function renderResults() {
   if (!$('#gallery-grid')) return;
-  $('#listing-title').textContent = (searchOptions(list.query,list.filters).query || list.filters?.f_shash) && !localCollection(list) ? '搜索结果' : popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '热门与最新' : '最新图集' : '源站热门' : route()==='discover' ? (feeds.find(([id])=>id===feedFor(list))?.[1]||'发现') : names[route()];
+  $('#listing-title').textContent = route()==='search' ? '搜索结果' : (searchOptions(list.query,list.filters).query || list.filters?.f_shash) && !localCollection(list) ? '搜索结果' : popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '热门与最新' : '最新图集' : '源站热门' : route()==='discover' ? (feeds.find(([id])=>id===feedFor(list))?.[1]||'发现') : pageNames[route()];
   const sourceSort = $('#sort option[value=source]');
   if (sourceSort) sourceSort.textContent = popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '推荐顺序' : '最新顺序' : '热门顺序' : '源站顺序';
-  const note = popularFeed(list) && list.discoveryLatest ? list.discoveryFallback === 'unavailable' ? '热门暂时不可用，已切换到最新图集。' : list.popularIds?.length ? '热门已看完，继续浏览最新图集。' : '当前分类暂无热门，已切换到最新图集。' : '';
+  const note = rankingFeed(list) ? `榜单由 E-Hentai 提供，图集按 ${sourceName(list.source)} 打开，并应用当前全局分类。` : popularFeed(list) && list.discoveryLatest ? list.discoveryFallback === 'unavailable' ? '热门暂时不可用，已切换到最新图集。' : list.popularIds?.length ? '热门已看完，继续浏览最新图集。' : '当前分类暂无热门，已切换到最新图集。' : '';
   $('#discovery-note').textContent = note;$('#discovery-note').hidden = !note;
   const items = filtered(); $('#result-count').textContent = list.isLoading ? '正在请求源站…' : `${items.length} 本图集`;
+  $('#result-heading').hidden = route()==='search' && !searchReady(list);
   $('#gallery-grid').className = `grid ${list.listMode ? 'list-mode' : ''}`;
   const emptyMessages = {favorites:['还没有收藏','点击图集右上角的爱心，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
-  const [title, message] = !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : list.query || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[route()] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
+  const [title, message] = route()==='search' && !searchReady(list) ? ['搜索图集','输入关键词，或在更多选项中使用高级搜索与以图搜图。'] : !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : rankingFeed(list) && list.nextCursor ? ['本页暂无符合筛选的图集','可继续加载后面的排名，或调整全局分类和筛选条件。'] : list.query || route()==='search' && searchReady(list) || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[collectionView(list)] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
   $('#gallery-grid').innerHTML = items.length ? items.map(card).join('') : list.isLoading ? '<div class="loading">正在获取实时图集…</div>' : list.listError ? '' : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">${icons[route()]}</div><h3>${title}</h3><p>${message}</p></div>`;
-  $('#list-status').innerHTML = list.listError ? `<div class="empty"><p role="alert">${escape(list.listError)}</p><button class="outline-button" data-action="retry-list">重新加载</button></div>` : list.nextCursor || popularFeed(list) && list.discoveryContinuation ? `<button class="outline-button" data-action="load-more" ${list.isLoading ? 'disabled' : ''}>${list.isLoading ? '正在加载…' : popularFeed(list) && list.discoveryContinuation ? '继续浏览最新图集' : '加载更多'}</button>` : '';
+  const more=!!list.nextCursor || popularFeed(list)&&list.discoveryContinuation;
+  $('#list-status').innerHTML=list.listError?`<div class="empty"><p role="alert">${escape(list.listError)}</p><button class="outline-button" data-action="retry-list">重试</button></div>`:more?`<div class="load-sentinel" data-loading="${list.isLoading}" role="status" aria-live="polite">${list.isLoading?'正在加载…':'上滑加载更多'}</div>`:items.length&&!list.isLoading?'<span class="list-end">已经到底了</span>':'';
+  listLoader.watch($('#list-status .load-sentinel'),list.key);
   decorateIcons();
 }
 function renderHero() {
@@ -122,9 +132,13 @@ function renderHero() {
   $('#tag-filters').innerHTML = ['全部',...tags].map(tag => { const active = tag === '全部' ? !list.query : list.query === tagQuery(tag); return `<button ${tagAttributes(tag)} class="chip ${active ? 'active' : ''} ${state.tagPreferences.some(pref=>pref.tag===tag&&pref.watch)?'watched-tag':''}" ${tag === '全部' ? 'data-action="clear-search"' : `data-search-tag="${escape(tag)}"`} aria-pressed="${active}">${escape(tag)}</button>`; }).join('');
 }
 function render() {
-  nav(); const view = route(), titles = {discover:['发现此刻的热门。',`来自 ${sourceName(list.source)} Popular，热门优先，继续浏览最新图集，应用你的全局分类。`], favorites:['收藏你的心动瞬间。','喜欢的作品，在这里重逢。'], history:['从上次停下的地方，继续。','每一段阅读，都值得被记住。'], library:['属于你的，图像世界。','搜索源站图集，寻找下一次灵感。']};
-  $('#main').innerHTML = `<div class="heading-row"><div><div class="eyebrow">${view === 'discover' ? 'A QUIET SPACE FOR YOUR INSPIRATION' : 'YOUR PERSONAL COLLECTION'}</div><h1>${titles[view][0]}</h1><p class="intro">${titles[view][1]}</p></div><span class="date-note">A little escape, a new perspective.</span></div><div id="hero"></div>${features.controls(list)}<section aria-label="图集列表"><div class="section-heading"><h2><span id="listing-title">${view === 'discover' ? '源站热门' : names[view]}</span><small id="result-count"></small></h2><div class="view-options"><button class="category-button" data-action="settings" aria-label="设置全局分类">分类 · ${state.categories.length === categories.length ? '全部' : state.categories.length}</button><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">↻</button><select id="sort" aria-label="图集排序">${view === 'discover' || feedFor(list)==='favorites' ? '<option value="source">源站顺序</option>' : ''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${list.listMode ? '▦' : '☷'}</button></div></div><div class="toolbar"><div id="tag-filters" class="chips"></div><label class="search"><span aria-hidden="true">${icon('search')}</span><input id="search" type="search" placeholder="${localCollection(list) ? '搜索当前列表' : `搜索 ${sourceName(list.source)} 图集或粘贴图集链接`}" value="${escape(list.query)}" aria-label="搜索图集"></label></div><p id="discovery-note" class="discovery-note" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
-  $('#sort').value = list.sort; renderHero(); renderResults();decorateIcons();
+  nav();const view=route(),searchPage=view==='search';
+  document.body.classList.toggle('searching',searchPage);
+  const titles={discover:['发现此刻的热门。',rankingFeed(list)?'E-Hentai 公共排行榜，图集按 '+sourceName(list.source)+' 打开。':feedFor(list)==='watched'?'根据源站账号关注标签浏览图集。':sourceName(list.source)+' Popular，热门优先，继续浏览最新图集，应用你的全局分类。'],favorites:['收藏你的心动瞬间。','喜欢的作品，在这里重逢。'],history:['从上次停下的地方，继续。','每一段阅读，都值得被记住。'],library:['属于你的，图像世界。','搜索源站图集，寻找下一次灵感。']};
+  const placeholder=localCollection(list)?collectionView(list)==='favorites'?'搜索本机收藏':'搜索阅读足迹':feedFor(list)==='favorites'?'搜索源站收藏':`搜索 ${sourceName(list.source)} 图集`;
+  const heading=searchPage?`<header class="search-page-header"><button class="icon-button" data-action="search-back" aria-label="返回上一页">${icon('back')}</button><form id="search-page-form"><label class="search"><span aria-hidden="true">${icon('search')}</span><input id="search" type="search" enterkeyhint="search" placeholder="${placeholder}" value="${escape(list.query)}" aria-label="搜索图集" autocomplete="off"></label><button class="primary-button search-submit" type="submit">搜索</button></form></header>`:`<div class="heading-row"><div><div class="eyebrow">${view==='discover'?'A QUIET SPACE FOR YOUR INSPIRATION':'YOUR PERSONAL COLLECTION'}</div><h1>${titles[view][0]}</h1><p class="intro">${titles[view][1]}</p></div><span class="date-note">A little escape, a new perspective.</span></div>`;
+  $('#main').innerHTML=`${heading}<div id="hero"></div>${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h2><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h2><div class="view-options"><button class="category-button" data-action="settings" aria-label="设置全局分类">分类 · ${state.categories.length===categories.length?'全部':state.categories.length}</button><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">↻</button><select id="sort" aria-label="图集排序">${view==='discover'||searchPage||feedFor(list)==='favorites'?'<option value="source">源站顺序</option>':''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${icon(list.listMode?'grid':'list')}</button></div></div><div class="toolbar"><div id="tag-filters" class="chips"></div></div><p id="discovery-note" class="discovery-note" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
+  $('#sort').value=list.sort;renderHero();renderResults();decorateIcons();
 }
 async function loadGalleries(append=false,target=list) {
   if (renderTimer && debounceTarget === target) { clearTimeout(renderTimer); renderTimer = null; debounceTarget = null; }
@@ -135,15 +149,16 @@ async function loadGalleries(append=false,target=list) {
   target.isLoading = true; target.listError = ''; target.initialized = true;
   target.pendingAppend = append; target.categoryKey = selected.join('|'); target.authScope = source === 'exhentai' || accountList(target) ? exSession.scope : null;
   if (!append) { target.galleries = []; target.nextCursor = null; target.scrollY = 0;target.discoveryContinuation = false;target.discoveryLatest = false;target.popularIds = [];target.discoveryFallback = null; }
-  if (!selected.length) { target.isLoading = false; target.nextCursor = null; }
+  const emptySearch=view==='search'&&!searchReady(target);
+  if (!selected.length || emptySearch) { target.isLoading = false; target.nextCursor = null; }
   if (target === list) { renderHero(); renderResults(); if (!append && entry.screen === 'list') restoreScroll(); }
   lists.save();
-  if (!selected.length) return;
+  if (!selected.length || emptySearch) return;
   target.pendingRequest = (async () => {
     try {
       let data;
       if (localCollection(target)) {
-        const ids = (view === 'favorites' ? state.favorites : Object.keys(state.progress)).filter(id => id.includes('/') && galleryReference(id).source === source);
+        const ids = (collectionView(target) === 'favorites' ? state.favorites : Object.keys(state.progress)).filter(id => id.includes('/') && galleryReference(id).source === source);
         data = {galleries:await metadata(ids.map(id => { const {gid,token} = galleryReference(id); return [Number(gid),token]; }),source),next:null};
       } else {
         const match = search.trim().match(/^https:\/\/(e-hentai|exhentai)\.org\/g\/(\d+)\/([a-f0-9]+)\/?$/);
@@ -162,7 +177,7 @@ async function loadGalleries(append=false,target=list) {
       if (request !== target.requestId) return;
       data.galleries.forEach(g => knownGalleries.set(g.id,g));
       target.galleries = append ? [...new Map([...target.galleries,...data.galleries].map(g => [g.id,g])).values()] : data.galleries;
-      target.nextCursor = data.next;
+      target.nextCursor = append && data.next===cursor ? null : data.next;
       if (discovery) {
         target.discoveryContinuation = data.continuation;target.discoveryLatest = data.latest;
         if (data.popularIds) target.popularIds = data.popularIds;
@@ -395,7 +410,7 @@ function remember() {
   if (!list || !entry) return;
   if (!restoringScroll && !document.body.classList.contains('reading')) list.scrollY = window.scrollY;
   if ($('#detail-dialog').open) { entry.detailScroll = $('#detail-dialog').scrollTop;entry.tagsOpen = !!$('#detail-dialog').querySelector('.photo-tag-panel')?.open; }
-  history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source,feed:list.feed,filters:list.filters,favoriteMode:list.favoriteMode}},'');
+  history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source,feed:list.feed,filters:list.filters,favoriteMode:list.favoriteMode,searchOrigin:list.searchOrigin,searchScope:list.searchScope,searchFeed:list.searchFeed}},'');
   lists.save();
 }
 function restoreScroll() {
@@ -403,11 +418,11 @@ function restoreScroll() {
   restoringScroll = true;
   requestAnimationFrame(() => {
     if (target === list && entry.screen !== 'reader') window.scrollTo({top:y,behavior:'instant'});
-    requestAnimationFrame(() => { restoringScroll = false; });
+    requestAnimationFrame(() => { restoringScroll = false;listLoader.check(); });
   });
 }
 function makeEntry(screen,target,galleryId=null,parent=false,photoIndex=0) {
-  return {yijingNav:1,key:crypto.randomUUID(),listKey:target.key,view:target.view,source:target.source,screen,galleryId,parent,photoIndex,fallback:{view:target.view,query:target.query,sort:target.sort,listMode:target.listMode,source:target.source,feed:target.feed,filters:target.filters,favoriteMode:target.favoriteMode}};
+  return {yijingNav:1,key:crypto.randomUUID(),listKey:target.key,view:target.view,source:target.source,screen,galleryId,parent,photoIndex,fallback:{view:target.view,query:target.query,sort:target.sort,listMode:target.listMode,source:target.source,feed:target.feed,filters:target.filters,favoriteMode:target.favoriteMode,searchOrigin:target.searchOrigin,searchScope:target.searchScope,searchFeed:target.searchFeed}};
 }
 function entryHash(value) {
   if (['photo','photo-full'].includes(value.screen)) return `#${value.screen}/${value.galleryId}/${(value.photoIndex || 0)+1}`;
@@ -417,8 +432,9 @@ function adoptLocation() {
   const hash = location.hash || '#discover';
   if (history.state?.yijingNav === 1 && entryHash(history.state) === hash) return history.state;
   const [screen,...parts] = hash.slice(1).split('/');
-  const view = names[screen] ? screen : 'discover';
-  const target = names[screen] ? lists.tab(view,state.source) || lists.create(view,'',state.source) : list || lists.tab(view,state.source) || lists.create(view,'',state.source);
+  const browseScreen=!!names[screen]||screen==='search';
+  const view = browseScreen ? screen : 'discover';
+  const target = browseScreen ? lists.tab(view,state.source) || lists.create(view,'',state.source) : list || lists.tab(view,state.source) || lists.create(view,'',state.source);
   const photoScreen = ['photo','photo-full'].includes(screen);
   const photoIndex = photoScreen ? Math.max(0,Number(parts.pop())-1 || 0) : 0;
   const value = makeEntry(photoScreen ? screen : screen === 'read' ? 'reader' : screen === 'gallery' ? 'detail' : 'list',target,parts.join('/') || null,false,photoIndex);
@@ -429,6 +445,16 @@ function applyNavigation() {
   flushSearch();
   const next = adoptLocation();
   if (next.key === appliedEntry) return;
+  const legacy=lists.lists.get(next.listKey);
+  if(next.screen==='list' && legacy && legacy.view!=='search' && searchReady(legacy)){
+    const origin=legacy.view,feed=feedFor(legacy),root=lists.create(origin,'',legacy.source);
+    Object.assign(root,{feed:legacy.feed,favoriteMode:legacy.favoriteMode,filters:legacy.filters?.favcat===undefined?{}:{favcat:legacy.filters.favcat}});
+    Object.assign(legacy,{view:'search',searchOrigin:origin,searchScope:origin,searchFeed:['watched','favorites'].includes(feed)?feed:'latest'});
+    lists.activate(root);lists.activate(legacy);lists.save();
+    const parent=makeEntry('list',root);history.replaceState(parent,'',entryHash(parent));
+    const search=makeEntry('list',legacy,null,true);history.pushState(search,'',entryHash(search));
+    return applyNavigation();
+  }
   const previous = list, previousEntry = entry;
   if (next.screen === 'detail' && previousEntry?.galleryId === next.galleryId && ['reader','photo','photo-full'].includes(previousEntry.screen)) next.focusPhoto = previousEntry.screen === 'reader' ? currentPage : photoViewer.index;
   if (next.screen === 'photo' && previousEntry?.galleryId === next.galleryId) {
@@ -440,7 +466,7 @@ function applyNavigation() {
   list = lists.lists.get(next.listKey);
   if (!list) {
     list = lists.create(next.fallback?.view || next.view,next.fallback?.query || '',next.source || next.fallback?.source || 'e-hentai');
-    Object.assign(list,{sort:next.fallback?.sort || list.sort,listMode:!!next.fallback?.listMode,feed:next.fallback?.feed || list.feed,filters:next.fallback?.filters || {},favoriteMode:next.fallback?.favoriteMode || 'local'});
+    Object.assign(list,{sort:next.fallback?.sort || list.sort,listMode:!!next.fallback?.listMode,feed:next.fallback?.feed || list.feed,filters:next.fallback?.filters || {},favoriteMode:next.fallback?.favoriteMode || 'local',searchOrigin:next.fallback?.searchOrigin,searchScope:next.fallback?.searchScope,searchFeed:next.fallback?.searchFeed});
     entry.listKey = list.key; history.replaceState(entry,'');
   }
   if (list.source === 'exhentai' && !exSession.configured) {
@@ -484,9 +510,10 @@ function navigateTab(view) {
 function back() {
   remember();
   if (entry.parent) history.back();
+  else if(list.view==='search'){const view=list.searchOrigin||'library';navigate('list',lists.tab(view,list.source)||lists.create(view,'',list.source),null,{replace:true});}
   else navigate('list',list,null,{replace:true});
 }
-function searchTag(tag) { navigate('list',lists.create('library',tagQuery(tag),list.source)); }
+function searchTag(tag) { openSearch(tagQuery(tag),{},true); }
 function flushSearch() {
   if (!renderTimer) return;
   clearTimeout(renderTimer); renderTimer = null;
@@ -610,7 +637,7 @@ function settings() {
   updateSourceSettings(); refreshExSession({fillForm:true}).then(updateSourceSettings).catch(error => { $('#ex-session-status').textContent = error.message; }); updateImageCount();
   $('#category-options').innerHTML = categories.map(category => `<label class="category-option"><input type="checkbox" name="category" value="${escape(category.name)}" ${state.categories.includes(category.name) ? 'checked' : ''}><span>${escape(category.name)}<small>${escape(category.label)}</small></span></label>`).join('');
   categoryCount();
-  $('#mode-setting').value = state.mode; $('#direction-setting').value = state.direction; $('#theme-setting').value = state.theme;
+  $('#theme-setting').value = state.theme;
   $('#source-info').textContent = `当前来源：${sourceName(list.source)}。返回时保留列表，点击刷新可获取最新信息。已缓存图片可从本机读取，未缓存图片需要网络。`;
   $('#settings-dialog').showModal();
   $('#settings-dialog').scrollTop = 0;
@@ -631,7 +658,7 @@ document.addEventListener('click', event => {
     'refresh-list':() => loadGalleries(), 'retry-detail':() => renderDetail(entry.galleryId),
     'load-more':() => loadGalleries(true), 'retry-list':() => loadGalleries(list.pendingAppend), 'retry-reader':() => openReader(entry.galleryId),
     theme:() => { state.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; save(); theme(); },
-    settings, 'close-settings':() => $('#settings-dialog').close(), 'close-detail':back,
+    'search-back':back,settings, 'close-settings':() => $('#settings-dialog').close(), 'close-detail':back,
     'exit-reader':back, 'reader-mode':() => { if (readerMode === 'scroll') navigate('photo',list,activeGallery.id,{replace:true,photoIndex:currentPage}); else { readerMode = 'scroll';state.mode = 'scroll';save();renderReader(); } },
     'reader-favorite':() => favorite(activeGallery.id), prev:() => goPage(currentPage - 1), next:() => goPage(currentPage + 1),
     view:() => { remember(); list.listMode = !list.listMode; render(); restoreScroll(); remember(); }, 'clear-history':() => { if (confirm('清除这台设备上的全部阅读记录？收藏会保留。')) { state.progress = {}; save(); renderResults(); remember(); toast('已清除阅读记录'); } }
@@ -641,7 +668,8 @@ document.addEventListener('input', event => {
   if (event.target.id === 'search') {
     if (debounceTarget && debounceTarget !== list) flushSearch();
     list.query = event.target.value; clearTimeout(renderTimer);
-    if (localCollection(list)) renderResults();
+    const localIds=localCollection(list)?(collectionView(list)==='favorites'?state.favorites:Object.keys(state.progress)).filter(id=>galleryReference(id).source===list.source):[];
+    if (localCollection(list) && localIds.every(id=>knownGalleries.has(id))) renderResults();
     else {
       const target = list; target.requestId = (target.requestId || 0) + 1; target.isLoading = true; target.pendingAppend = false; target.pendingRequest = null;
       debounceTarget = target;
@@ -656,7 +684,7 @@ document.addEventListener('change', event => {
   if (event.target.name === 'category') categoryCount();
   const id = event.target.id;
   if (id === 'sort') { list.sort = event.target.value; renderResults(); remember(); }
-  if (['mode-setting','direction-setting','theme-setting'].includes(id)) { state[id.split('-')[0]] = event.target.value; save(); theme(); }
+  if (id === 'theme-setting') { state.theme = event.target.value; save(); theme(); }
 });
 document.addEventListener('keydown', event => {
   if (entry.screen !== 'reader') return;
@@ -693,6 +721,21 @@ window.addEventListener('pageshow',event => {
 });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { record(); remember(); } });
 
+function openSearch(query='',filters={},global=false) {
+  const target=lists.create('search',query,list.source);
+  target.searchOrigin=list.searchOrigin||(names[list.view]?list.view:'library');
+  target.searchScope=global?'source':list.searchScope||list.view;
+  target.searchFeed=global?'latest':['watched','favorites'].includes(feedFor(list))?feedFor(list):'latest';
+  target.favoriteMode=list.favoriteMode;target.filters=filters;target.sort='source';
+  navigate('list',target,null,{replace:list.view==='search'&&entry.screen==='list'});
+}
+document.addEventListener('submit',event=>{
+  if(event.target.id!=='search-page-form')return;
+  event.preventDefault();clearTimeout(renderTimer);renderTimer=null;debounceTarget=null;
+  if(!list.isLoading||!list.pendingRequest)loadGalleries(false,list);
+  remember();$('#search')?.blur();
+});
+
 const features = new SourceFeatures({
   request:requestJSON,toast,state,save,getList:()=>list,getScope:()=>exSession.scope,
   ensureAccount:async()=>{await refreshExSession();return exSession.configured;},
@@ -703,9 +746,8 @@ const features = new SourceFeatures({
   onFavoriteMode:(mode,group='')=>{
     const target=lists.create('favorites',list.view==='favorites'?list.query:'',list.source);target.favoriteMode=mode;target.filters={...(list.view==='favorites'?list.filters:{}),favcat:group};target.sort=mode==='source'?'source':'newest';navigate('list',target);
   },
-  onSearch:(query,filters,view=route())=>{
-    const target=lists.create(view,query,list.source);target.feed=list.feed;target.favoriteMode=list.favoriteMode;target.filters=filters;navigate('list',target);
-  },
+  onOpenSearch:()=>{openSearch('',{...list.filters});$('#search')?.focus({preventScroll:true});},
+  onSearch:(query,filters,view)=>openSearch(query,filters,view==='library'),
   onPreferences:tags=>{state.tagPreferences=tags;save();if($('#gallery-grid')){renderHero();renderResults();}},
   onFavoriteSaved:(gallery,change)=>{
     for(const target of lists.lists.values())if(target.view==='favorites'&&target.favoriteMode==='source'&&target.source===gallery.source){
@@ -715,6 +757,10 @@ const features = new SourceFeatures({
     }lists.save();
   }
 });
+const listLoader=new InfiniteList(
+  key=>{if(list?.key===key)loadGalleries(true,list);},
+  key=>list?.key===key&&entry?.screen==='list'&&!list.isLoading&&!list.listError&&!restoringScroll&&!document.querySelector('dialog[open]')&&document.visibilityState!=='hidden'&&(!!list.nextCursor||popularFeed(list)&&list.discoveryContinuation)
+);
 decorateIcons();
 
 async function boot() {

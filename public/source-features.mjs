@@ -25,7 +25,7 @@ export class SourceFeatures {
     const advanced=list.filters||{};
     const tabs=list.view==='discover'?`<nav class="feed-tabs" aria-label="发现内容"><div role="tablist">${feeds.map(([id,label])=>`<button role="tab" aria-selected="${feedFor(list)===id}" data-feature="feed" data-feed="${id}">${label}</button>`).join('')}</div></nav>`:'';
     const favorites=list.view==='favorites'?`<div class="favorite-modes">${button('local-favorites','本机收藏',`aria-pressed="${list.favoriteMode!=='source'}"`)}${button('source-favorites','源站收藏',`aria-pressed="${list.favoriteMode==='source'}"`)}${list.favoriteMode==='source'?`<label class="favorite-group-label">分组<select data-feature-select="favorite-group"><option value="">全部分组</option>${Array.from({length:10},(_,id)=>`<option value="${id}" ${String(advanced.favcat)===String(id)?'selected':''}>${esc(this.groups.find(group=>group.id===id)?.name||`收藏分组 ${id+1}`)}</option>`).join('')}</select></label>`:''}</div>`:'';
-    return tabs+favorites+`<div class="source-tools">${button('advanced',`${icon('filter')}高级搜索`)}${button('image-search',`${icon('image')}以图搜图`)}${button('tags',`${icon('tag')}标签偏好`)}</div>`+(advanced.f_shash?`<p class="feature-note">正在显示图片搜索结果 ${button('clear-image','退出以图搜图')}</p>`:'');
+    return tabs+favorites+`<div class="browse-actions">${list.view==='search'?'':button('search',`${icon('search')}搜索`,'aria-label="搜索图集"')}<details class="advanced-tools"><summary>${icon('filter')}<span>更多选项</span>${Object.entries(advanced).some(([key,value])=>key!=='favcat'&&value)?'<small>有筛选</small>':''}<span class="disclosure-icon">${icon('down')}</span></summary><div class="source-tools">${button('advanced',`${icon('filter')}高级搜索`)}${button('image-search',`${icon('image')}以图搜图`)}${button('tags',`${icon('tag')}标签偏好`)}</div></details></div>`+(advanced.f_shash?`<p class="feature-note">正在显示图片搜索结果 ${button('clear-image','退出以图搜图')}</p>`:'');
   }
   mountGallery(gallery,root) {
     this.gallery=gallery;
@@ -49,6 +49,7 @@ export class SourceFeatures {
   clearPrivate() {this.groups=[];this.tags={tags:[],sets:[]};this.tagSynced=false;if(this.dialog.open)this.dialog.close();}
   async handle(action,target) {
     if(action==='close')return this.dialog.close();
+    if(action==='search')return this.onOpenSearch();
     if(action==='feed'){
       const intent=++this.sequence;
       if(target.dataset.feed==='watched'){
@@ -141,7 +142,7 @@ export class SourceFeatures {
     const kind=form.dataset.featureForm,data=Object.fromEntries(new FormData(form));
     if(submitter?.name)data[submitter.name]=submitter.value;
     if(kind==='advanced') {
-      const {query,...filters}=data;
+      const {query,...fields}=data,filters={...this.getList().filters,...fields};
       filters.f_sto=form.elements.f_sto.checked;filters.f_sh=form.elements.f_sh.checked;
       if(filters.f_spf&&filters.f_spt&&Number(filters.f_spf)>Number(filters.f_spt))throw new Error('最少页数不能大于最多页数');
       this.dialog.close();return this.onSearch(query,filters);

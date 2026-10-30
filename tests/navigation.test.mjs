@@ -62,6 +62,13 @@ test('discovery continuation migrates existing popular results and preserves lat
   assert.equal(restored.nextCursor,'latest-page-2');assert.deepEqual(restored.popularIds,['1/abcdef']);
 });
 
+test('saved ExHentai toplist 404s retry after the endpoint fix instead of restoring the stale error',()=>{
+  const storage={getItem:()=>JSON.stringify({version:1,tabs:{},lists:[{key:'rank',view:'discover',source:'exhentai',feed:'yesterday',query:'',discoveryVersion:2,galleries:[],initialized:true,isLoading:false,listError:'ExHentai 请求失败（404）'}]})};
+  const list=new ListStore(storage).lists.get('rank');
+  assert.equal(list.initialized,false);assert.equal(list.isLoading,false);assert.equal(list.listError,'');
+  assert.equal(list.feed,'yesterday');assert.equal(list.source,'exhentai');
+});
+
 test('source-specific lists stay isolated and clearing ExHentai removes its snapshots',() => {
   const store=new ListStore();
   const publicList=store.create('library','public query');store.activate(publicList);

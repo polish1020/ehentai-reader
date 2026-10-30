@@ -36,6 +36,25 @@ test('yesterday, month, year and all-time rankings use the correct source list a
   }
 });
 
+test('ExHentai rankings use the shared public endpoint, filter categories before metadata, and never forward private credentials',async t=>{
+  const calls=[];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    const target=new URL(url);calls.push({url:target,options});
+    if(target.hostname==='exhentai.org'&&target.pathname==='/toplist.php')return new Response('Missing',{status:404});
+    const tl=target.searchParams.get('tl');
+    return new Response(`<table><tr><td><div class="cn">Manga</div></td><td><a href="https://e-hentai.org/g/1/abcdef/">Excluded</a></td></tr><tr><td><div class="cs">Cosplay</div></td><td><a href="https://e-hentai.org/g/2/abcdef/">Included</a></td></tr></table><a href="/toplist.php?tl=${tl}&p=2">Next</a>`);
+  });
+  for(const feed of ['yesterday','month','year','all']){
+    const response=await galleries(request(`/api/galleries?source=exhentai&feed=${feed}&next=1&f_cats=703`,{logged:true}));
+    assert.deepEqual(await response.json(),{ids:[[2,'abcdef']],next:'2'});
+    assert.equal(calls.at(-1).url.hostname,'e-hentai.org');assert.equal(calls.at(-1).url.pathname,'/toplist.php');
+    assert.equal(calls.at(-1).options.headers.Cookie,undefined);assert.equal(calls.at(-1).options.headers.Origin,undefined);
+  }
+  assert.equal((await galleries(request('/api/galleries?source=exhentai&feed=yesterday&q=fixture',{logged:true}))).status,200);
+  assert.equal(calls.at(-1).url.hostname,'exhentai.org');assert.equal(calls.at(-1).url.pathname,'/');
+  assert.match(calls.at(-1).options.headers.Cookie,/fixture-pass/);
+});
+
 test('watched and source favorites use account credentials, while ordinary public lists remain anonymous',async t=>{
   const calls=[];t.mock.method(globalThis,'fetch',async(url,options)=>{calls.push({url:new URL(url),options});return new Response('<a href="https://e-hentai.org/g/1/abcdef/">Fixture</a>');});
   for(const feed of ['watched','favorites']){
@@ -120,4 +139,6 @@ test('advanced search and quick tags preserve namespaces, prioritize followed ta
   assert.equal(accepts({tags:['artist:fixture','language:chinese'],creator:'Reader',pageCount:30,rating:5},{artist:'Fixture',language:'chinese',uploader:'reader'},[]),true);
   assert.equal(accepts({tags:['artist:fixture'],creator:'Reader',pageCount:30,rating:5},{exclude:'artist:fixture'},[]),false);
   assert.equal(feedFor({view:'favorites',favoriteMode:'source'}),'favorites');
+  assert.equal(feedFor({view:'search',searchFeed:'favorites'}),'favorites');
+  assert.equal(feedFor({view:'search',searchFeed:'watched'}),'watched');
 });
