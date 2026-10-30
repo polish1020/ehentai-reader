@@ -7,6 +7,6 @@ createServer(async (req,res) => {
   try {
     const url = new URL(req.url,'http://localhost'); const path = resolve(root,'.'+decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
     if (!path.startsWith(root+'/') || !(await stat(path)).isFile()) throw Error();
-    res.writeHead(200,{'Content-Type':types[extname(path)] || 'application/octet-stream','Cache-Control':'no-cache'}); res.end(await readFile(path));
+    res.writeHead(200,{'Content-Type':extname(path)==='.mjs' ? 'text/javascript; charset=utf-8' : types[extname(path)] || 'application/octet-stream','Cache-Control':'no-cache'}); res.end(await readFile(path));
   } catch { res.writeHead(404); res.end('Not found'); }
 }).listen(3000,'0.0.0.0',() => console.log('Reader available on http://localhost:3000'));

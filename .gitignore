@@ -3,3 +3,5 @@ dist/
 staging/
 .vercel/
 test-results/
+__pycache__/
+*.pyc

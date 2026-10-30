@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "content": {
+    "allowedCategories": ["cosplay"],
+    "allowedSources": ["demo", "e-hentai"],
+    "blockedTags": [],
+    "blockedKeywords": [],
+    "blockedGalleryIds": [],
+    "maxPagesPerGallery": 200
+  },
+  "review": {
+    "approvedStatus": "approved-non-explicit",
+    "requireDate": true,
+    "sourcesRequiringReviewer": ["e-hentai"],
+    "sourcesRequiringAllPagesReviewed": ["e-hentai"],
+    "sourcesRequiringImageHashes": ["e-hentai"]
+  },
+  "assets": {
+    "maxImageBytes": 26214400,
+    "extensionsBySource": {
+      "demo": ["svg", "png", "jpg", "jpeg", "webp", "gif", "avif"],
+      "e-hentai": ["png", "jpg", "jpeg", "webp", "gif", "avif"]
+    },
+    "mimeExtensions": {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+      "image/avif": "avif"
+    }
+  },
+  "network": {
+    "maxResponseBytes": 26214400,
+    "timeoutSeconds": 30,
+    "requestIntervalSeconds": 0.3,
+    "hosts": [
+      {"hostname": "e-hentai.org", "includeSubdomains": false, "ports": [443]},
+      {"hostname": "ehgt.org", "includeSubdomains": true, "ports": [443]},
+      {"hostname": "hath.network", "includeSubdomains": true, "ports": "any"}
+    ]
+  }
+}

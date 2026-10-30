@@ -8,7 +8,7 @@ await validateCatalog(catalog,root);
 await rm(new URL('../dist/',import.meta.url),{recursive:true,force:true});
 await cp(new URL('../public/',import.meta.url),new URL('../dist/',import.meta.url),{recursive:true});
 const hasher = createHash('sha256');
-for (const file of ['index.html','style.css','app.js','catalog.json']) hasher.update(await readFile(new URL(`../public/${file}`,import.meta.url)));
+for (const file of ['index.html','style.css','app.js','catalog.json','content-policy.json','policy.mjs','sw.js']) hasher.update(await readFile(new URL(`../public/${file}`,import.meta.url)));
 const version = hasher.digest('hex').slice(0,12);
 let sw = await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
 sw = sw.replace('yijing-v1',`yijing-${version}`);

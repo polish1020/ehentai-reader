@@ -1,3 +1,4 @@
+import {validatePolicy,checkGallery} from './policy.mjs';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const names = {discover:'发现', favorites:'收藏', history:'足迹', library:'全部图集'};
@@ -168,10 +169,11 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 async function boot() {
   $('#main').innerHTML = '<div class="loading">正在打开你的阅读空间…</div>';
   try {
-    const response = await fetch('/catalog.json', {cache:'no-cache'}); if (!response.ok) throw new Error('catalog');
-    catalog = await response.json();
+    const [response, policyResponse] = await Promise.all([fetch('/catalog.json', {cache:'no-cache'}),fetch('/content-policy.json', {cache:'no-cache'})]);
+    if (!response.ok || !policyResponse.ok) throw new Error('catalog or policy');
+    catalog = await response.json();const policy=validatePolicy(await policyResponse.json());
     // Only immutable local, build-validated assets can enter the reader.
-    galleries = catalog.galleries.filter(g => g.category === 'cosplay' && g.review?.status === 'approved-non-explicit' && /^[a-z0-9-]+$/.test(g.id) && Array.isArray(g.pages) && g.pages.length > 0 && g.pages.every(p => /^\/assets\/[a-zA-Z0-9_./-]+$/.test(p.src) && !p.src.includes('..')));
+    galleries = catalog.galleries.filter(g => { try {checkGallery(g,policy);return true;} catch {return false;} });
     render(); if (location.hash.startsWith('#read/')) openReader(location.hash.slice(6));
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   } catch {
