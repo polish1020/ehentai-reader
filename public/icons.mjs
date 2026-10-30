@@ -26,10 +26,16 @@ export function icon(name) {
 const actions={'close-settings':'close','close-detail':'back','exit-reader':'back',prev:'back',next:'next','refresh-list':'refresh'};
 export function decorateIcons(root=document) {
   root.querySelectorAll('button[data-action],button[data-favorite]').forEach(button=>{
-    const name=button.hasAttribute('data-favorite')?'heart':button.dataset.action==='view'?(button.getAttribute('aria-pressed')==='true'?'grid':'list'):actions[button.dataset.action];
+    if(button.hasAttribute('data-favorite')){
+      const busy=button.getAttribute('aria-busy')==='true',compact=button.classList.contains('favorite-button')||button.id==='reader-favorite';
+      const label=button.dataset.favoriteLabel||(button.getAttribute('aria-pressed')==='true'?'已收藏':'收藏图集');
+      const signature=`favorite:${busy}:${compact?'':label}`;
+      if(button.dataset.icon!==signature){button.innerHTML=(busy?'<span class="loading-spinner" aria-hidden="true"></span>':icon('heart'))+(compact?'':`<span>${label}</span>`);button.dataset.icon=signature;}
+      return;
+    }
+    const name=button.dataset.action==='view'?(button.getAttribute('aria-pressed')==='true'?'grid':'list'):actions[button.dataset.action];
     if(name && button.dataset.icon!==name){
-      const label=button.hasAttribute('data-favorite')&&!button.classList.contains('favorite-button')?`<span>${button.getAttribute('aria-pressed')==='true'?'已收藏':'收藏图集'}</span>`:'';
-      button.innerHTML=icon(name)+label;button.dataset.icon=name;
+      button.innerHTML=icon(name);button.dataset.icon=name;
     }
   });
 }

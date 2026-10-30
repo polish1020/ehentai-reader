@@ -42,6 +42,7 @@ const favoriteCollection=target=>collectionView(target)==='favorites';
 const localCollection = target => collectionView(target)==='history';
 const searchReady = target => !!searchOptions(target.query,target.filters).query || Object.entries(target.filters||{}).some(([key,value])=>key!=='favcat'&&!!value);
 const knownGalleries = new Map(), thumbnailStores = new Map();
+const favoriteChecks=new Map();
 let detailThumbnails, photoRequest = 0;
 let session;
 try { session = sessionStorage; } catch { /* Keep navigation in memory. */ }
@@ -79,19 +80,40 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
 function route() { return list?.view || 'discover'; }
 function updateFavorites() {
   for(const target of lists.lists.values())if(favoriteCollection(target)&&target.authScope===exSession.scope){
-    target.galleries=[...new Map([...target.galleries,...favorites.galleries(target.source)].map(gallery=>[gallery.id,gallery])).values()].filter(gallery=>favorites.has(gallery.id));
+    target.galleries=[...new Map([...favorites.galleries(target.source),...target.galleries].map(gallery=>[gallery.id,gallery])).values()].filter(gallery=>favorites.has(gallery.id));
     target.remoteFavoriteIds=target.galleries.filter(gallery=>favorites.remote(gallery.id)).map(gallery=>gallery.id);
   }
-  for(const button of document.querySelectorAll('[data-favorite]')){
-    const id=button.dataset.favorite,selected=favorites.has(id);
-    button.setAttribute('aria-pressed',String(selected));button.disabled=favorites.busy(id);
-    button.innerHTML=icon('heart')+(button.classList.contains('favorite-button')?'':`<span>${selected?'已收藏':'收藏图集'}</span>`);
-  }
+  paintFavoriteButtons();
   if(activeGallery)updateReaderFavorite();
   if(entry?.screen==='list'){renderResults();remember();}
 }
+function paintFavoriteButtons(root=document) {
+  for(const button of root.querySelectorAll('[data-favorite]')){
+    const id=button.dataset.favorite,checking=favoriteChecks.has(id),busy=checking||favorites.busy(id),selected=favorites.has(id);
+    const label=busy?checking?'读取收藏…':favorites.removing(id)?'正在取消…':'正在收藏…':favorites.localOnly(id)?'仅本地':selected?'已收藏':'收藏图集';
+    button.disabled=busy;button.setAttribute('aria-pressed',String(selected));button.setAttribute('aria-busy',String(busy));button.dataset.favoriteLabel=label;
+    button.setAttribute('aria-label',busy?label:selected?favorites.localOnly(id)?'仅本地收藏':'已收藏':'收藏图集');
+  }
+  for(const button of root.querySelectorAll('[data-sync-favorite]')){
+    const busy=favorites.busy(button.dataset.syncFavorite);button.disabled=busy;button.setAttribute('aria-busy',String(busy));
+    button.innerHTML=busy?'<span class="loading-spinner" aria-hidden="true"></span><span>正在同步…</span>':'同步到源站';
+  }
+  decorateIcons(root);
+}
+async function checkGalleryFavorite(gallery) {
+  const token=Symbol(),id=gallery.id;favoriteChecks.set(id,token);paintFavoriteButtons();
+  try {
+    await refreshExSession();
+    const scope=exSession.scope;
+    if(scope&&!favorites.statusKnown(id)){
+      const info=await requestJSON('/api/source?'+new URLSearchParams({action:'favorite-info',source:gallery.source,gid:gallery.gid,token:gallery.token}));
+      if(favoriteChecks.get(id)===token)favorites.confirm(gallery,info,scope);
+    }
+  }catch{ /* Keep the last confirmed state; saving will report any source failure. */ }
+  finally{if(favoriteChecks.get(id)===token)favoriteChecks.delete(id);paintFavoriteButtons();}
+}
 function favoriteResult(result) {
-  return result.remoteSaved?`源站收藏已存在，但更新失败：${result.error}`:result.synced?result.remove?'已取消源站收藏':'已收藏并同步到源站':result.remove?`已从本地移除；源站取消失败：${result.error}`:`源站收藏失败，已保存在本地：${result.error}`;
+  return result.remoteSaved?result.remove?`源站取消收藏失败，仍保持已收藏：${result.error}`:`源站收藏已存在，但更新失败：${result.error}`:result.synced?result.remove?'已取消源站收藏':'已收藏并同步到源站':result.remove?`已从本地移除；源站取消失败：${result.error}`:`源站收藏失败，已保存在本地：${result.error}`;
 }
 async function saveFavorite(gallery,change={}) {
   const result=await favorites.set(gallery,change);toast(favoriteResult(result));return result;
@@ -113,11 +135,12 @@ function nav() {
 }
 function card(g) {
   const p = state.progress[g.id], percent = p ? Math.round((progressFor(g) + 1) / pageCount(g) * 100) : 0;
-  return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${pageCount(g)} P</span></div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div>${favoriteCollection(list)&&favorites.localOnly(g.id)?'<span class="favorite-local-label">仅本地</span>':''}${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button><button class="favorite-button" data-favorite="${escape(g.id)}" aria-label="收藏 ${escape(g.title)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥' : '♡'}</button>${favoriteCollection(list)&&favorites.localOnly(g.id)?`<button class="favorite-sync" data-sync-favorite="${escape(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.busy(g.id)?'正在同步…':'同步到源站'}</button>`:''}</article>`;
+  const confirmed=favorites.statusKnown(g.id)&&favorites.remote(g.id)&&favorites.has(g.id);
+  return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}${confirmed?'（已收藏）':''}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${pageCount(g)} P</span>${confirmed?`<span class="card-favorite-state" aria-label="已收藏到源站">${icon('heart')}</span>`:''}</div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div>${favoriteCollection(list)&&favorites.localOnly(g.id)?'<span class="favorite-local-label">仅本地</span>':''}${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button>${favoriteCollection(list)&&favorites.localOnly(g.id)?`<button class="favorite-sync" data-sync-favorite="${escape(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.busy(g.id)?'正在同步…':'同步到源站'}</button>`:''}</article>`;
 }
 function filtered() {
   if(list.view==='search'&&!searchReady(list))return [];
-  if(favoriteCollection(list))list.galleries=[...new Map([...list.galleries,...favorites.galleries(list.source)].map(gallery=>[gallery.id,gallery])).values()].filter(gallery=>favorites.has(gallery.id));
+  if(favoriteCollection(list))list.galleries=[...new Map([...favorites.galleries(list.source),...list.galleries].map(gallery=>[gallery.id,gallery])).values()].filter(gallery=>favorites.has(gallery.id));
   if (localCollection(list)) {
     const ids = collectionView(list) === 'favorites' ? state.favorites : Object.keys(state.progress);
     const known = ids.map(id => knownGalleries.get(id)).filter(g => g?.source === list.source);
@@ -156,7 +179,7 @@ function renderResults() {
   if (!$('#gallery-grid')) return;
   $('#listing-title').textContent = route()==='search' ? '搜索结果' : (searchOptions(list.query,list.filters).query || list.filters?.f_shash) && !localCollection(list) ? '搜索结果' : popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '热门与最新' : '最新图集' : '源站热门' : route()==='discover' ? (feeds.find(([id])=>id===feedFor(list))?.[1]||'发现') : pageNames[route()];
   const sourceSort = $('#sort option[value=source]');
-  if (sourceSort) sourceSort.textContent = popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '推荐顺序' : '最新顺序' : '热门顺序' : '源站顺序';
+  if (sourceSort) sourceSort.textContent = favoriteCollection(list)?'收藏顺序':popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '推荐顺序' : '最新顺序' : '热门顺序' : '源站顺序';
   const note = rankingFeed(list) ? `榜单由 E-Hentai 提供，图集按 ${sourceName(list.source)} 打开，并应用当前全局分类。` : popularFeed(list) && list.discoveryLatest ? list.discoveryFallback === 'unavailable' ? '热门暂时不可用，已切换到最新图集。' : list.popularIds?.length ? '热门已看完，继续浏览最新图集。' : '当前分类暂无热门，已切换到最新图集。' : '';
   $('#discovery-note').textContent = note;$('#discovery-note').hidden = !note;
   const items = filtered(); $('#result-count').textContent = list.isLoading ? '加载中…' : `${items.length} 本图集`;
@@ -166,13 +189,13 @@ function renderResults() {
   $('#favorite-notice').textContent=favoriteCollection(list)?list.favoriteNotice||'':'';
   $('#favorite-notice').hidden=!$('#favorite-notice').textContent;
   $('#gallery-grid').className = `grid ${list.listMode ? 'list-mode' : ''}`;
-  const emptyMessages = {favorites:['还没有收藏','点击图集右上角的爱心，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
+  const emptyMessages = {favorites:['还没有收藏','进入图集详情，点击底部收藏按钮，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
   const [title, message] = route()==='search' && !searchReady(list) ? ['搜索图集','输入关键词，或在筛选中使用高级搜索与以图搜图。'] : !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : rankingFeed(list) && list.nextCursor ? ['本页暂无符合筛选的图集','可继续加载后面的排名，或调整全局分类和筛选条件。'] : list.query || route()==='search' && searchReady(list) || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[collectionView(list)] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
   $('#gallery-grid').innerHTML = discoveryContent(items) ?? (items.length ? items.map(card).join('') : list.isLoading ? listLoading() : list.listError ? '' : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">${icons[route()]}</div><h3>${title}</h3><p>${message}</p></div>`);
   const more=!!list.nextCursor || popularFeed(list)&&list.discoveryContinuation;
   $('#list-status').innerHTML=list.listError?`<div class="empty"><p role="alert">${escape(list.listError)}</p><button class="outline-button" data-action="retry-list">重试</button></div>`:more?`<div class="load-sentinel" data-loading="${list.isLoading}" role="status" aria-live="polite">${list.isLoading?'正在加载…':'上滑加载更多'}</div>`:items.length&&!list.isLoading?'<span class="list-end">已经到底了</span>':'';
   listLoader.watch($('#list-status .load-sentinel'),list.key);
-  decorateIcons();
+  paintFavoriteButtons();
 }
 function renderQuickTags() {
   const visible = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category) && accepts(g,list.filters,state.tagPreferences));
@@ -342,7 +365,7 @@ async function renderDetail(id) {
   $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><span>${pageCount(g)} 张照片</span></div><div class="gallery-summary"><div class="gallery-summary-copy"><span class="eyebrow">${escape(sourceName(g.source))} / ${escape(g.category)}</span><h2>${escape(g.title)}</h2><div class="gallery-facts"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><details class="gallery-tags photo-tag-panel" ${entry.tagsOpen ? 'open' : ''}><summary>标签 · ${g.tags.length}<span>按标签查找相关图集</span></summary><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></details><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
   detailThumbnails = new ThumbnailView($('#detail-body').querySelector('.photo-album-grid'),$('#detail-dialog'),thumbnailStore(g));
-  features.mountGallery(g,$('#detail-body'));decorateIcons($('#detail-body'));
+  features.mountGallery(g,$('#detail-body'));paintFavoriteButtons($('#detail-body'));checkGalleryFavorite(g);
   $('#detail-dialog').scrollTop = entry.detailScroll || 0;
   if (Number.isInteger(entry.focusPhoto)) {
     const tile = $('#detail-body').querySelector(`[data-open-photo="${entry.focusPhoto}"]`);
@@ -359,7 +382,7 @@ function updateCounter() {
   $('#page-slider').value = String(currentPage + 1); $('#page-counter').textContent = `${currentPage + 1} / ${activeGallery.pages.length}`;
   $('[data-action=prev]').disabled = currentPage === 0; $('[data-action=next]').disabled = currentPage === activeGallery.pages.length - 1;
 }
-function updateReaderFavorite() { const b = $('#reader-favorite'); b.innerHTML = icon('heart'); b.setAttribute('aria-pressed', String(favorites.has(activeGallery.id)));b.disabled=favorites.busy(activeGallery.id); }
+function updateReaderFavorite() { const button=$('#reader-favorite');button.dataset.favorite=activeGallery.id;paintFavoriteButtons($('#reader')); }
 function readerImage(page,index) {
   const dimensions = readerPreloader?.loaded.get(index) || page;
   return `<div class="reader-page" data-index="${index}" style="aspect-ratio:${dimensions.width || 600}/${dimensions.height || 800}"><span class="reader-placeholder" aria-hidden="true">第 ${index+1} 页</span><img data-src="${escape(page.src)}" alt="${escape(page.alt || `${activeGallery.title} · 第 ${index+1} 页`)}" data-page="${index}" decoding="async" draggable="false" width="${dimensions.width || 600}" height="${dimensions.height || 800}"></div>`;
@@ -555,7 +578,7 @@ function applyNavigation() {
   lists.activate(list);
   features.cancel();
   sendImageContext();
-  if(favoriteCollection(list)&&list.authScope===exSession.scope&&exSession.scope)favorites.ingest(list.galleries.filter(gallery=>list.remoteFavoriteIds?.includes(gallery.id)),exSession.scope);
+  if(favoriteCollection(list)&&list.authScope===exSession.scope&&exSession.scope)favorites.ingest(list.galleries.filter(gallery=>list.remoteFavoriteIds?.includes(gallery.id)),exSession.scope,{cached:true});
   list.galleries.forEach(g => {knownGalleries.set(g.id,g);favorites.remember(g);});
   ++detailRequest;detailThumbnails?.close();detailThumbnails = null;
   if (!['photo','photo-full'].includes(entry.screen) && !$('#photo-viewer').hidden) hidePhotos();
@@ -734,7 +757,10 @@ document.addEventListener('click', event => {
   const button = event.target.closest('button'); if (!button) return;
   if (button.hasAttribute('data-open-photo')) return navigate('photo',list,entry.galleryId,{photoIndex:Number(button.dataset.openPhoto)});
   if (button.dataset.open) return navigate('detail',list,button.dataset.open);
-  if (button.dataset.favorite) return favorite(button.dataset.favorite);
+  if(button.dataset.favorite){
+    if(button.closest('.gallery-actions')&&favorites.has(button.dataset.favorite))return features.openFavorite();
+    return favorite(button.dataset.favorite);
+  }
   if(button.dataset.syncFavorite){const gallery=favorites.meta(button.dataset.syncFavorite).gallery;return gallery&&saveFavorite(gallery);}
   if (button.dataset.read) return navigate('reader',list,button.dataset.read);
   if (button.dataset.searchTag) return searchTag(button.dataset.searchTag);

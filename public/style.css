@@ -281,3 +281,14 @@ body.searching main{padding-top:8px}
 .comment-score{min-width:20px;text-align:center;font-size:11px;font-variant-numeric:tabular-nums}
 .feature-dialog:has(.source-comments) .feature-body{padding-top:12px;padding-bottom:16px}
 .feature-dialog:has(.source-comments) .feature-form{gap:10px;margin:12px 0 16px}
+
+[data-favorite][aria-busy=true]{opacity:1;color:var(--green)}
+.favorite-button[aria-busy=true] .loading-spinner{width:18px;height:18px}
+.gallery-actions [data-favorite]{min-width:132px}
+.favorite-sync{gap:7px}
+.favorite-sync[aria-busy=true],.source-actions [aria-busy=true]{display:inline-flex;align-items:center;justify-content:center;gap:8px;opacity:1}
+
+[data-favorite][aria-pressed=true] .ui-icon{fill:currentColor}
+
+.card-favorite-state{position:absolute;top:8px;right:8px;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface);color:var(--green);pointer-events:none}
+.card-favorite-state .ui-icon{width:18px;height:18px;fill:currentColor}

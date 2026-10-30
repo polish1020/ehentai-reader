@@ -60,6 +60,7 @@ test('watched and source favorites use account credentials, while ordinary publi
   for(const feed of ['watched','favorites']){
     const result=await galleries(request(`/api/galleries?feed=${feed}&favcat=2`,{logged:true}));assert.equal(result.status,200);
     assert.match(calls.at(-1).options.headers.Cookie,/fixture-pass/);assert.equal(calls.at(-1).url.pathname,feed==='watched'?'/watched':'/favorites.php');
+    if(feed==='favorites')assert.equal(calls.at(-1).url.searchParams.get('inline_set'),'fs_f');
   }
   await galleries(request('/api/galleries',{logged:true}));assert.equal(calls.at(-1).options.headers.Cookie,undefined);
 });
@@ -76,10 +77,10 @@ test('rating and comment votes keep source API keys on the server and accept onl
 
 test('favorite saves encode group and notes, and redirects do not repeat the write',async t=>{
   const calls=[];t.mock.method(globalThis,'fetch',async(url,options)=>{
-    calls.push({url:new URL(url),options});return calls.length===1?new Response(null,{status:302,headers:{Location:'/gallerypopups.php?saved=1'}}):calls.length===2?new Response('<p>Saved</p>'):new Response('<select name="favcat"><option value="2" selected>Reading</option></select><textarea name="favnote">A &amp; B</textarea>');
+    calls.push({url:new URL(url),options});return calls.length===1?new Response(null,{status:302,headers:{Location:'/gallerypopups.php?saved=1'}}):calls.length===2?new Response('<p>Saved</p>'):new URL(url).pathname.startsWith('/g/')?new Response('<a id="favoritelink">Reading</a>'):new Response('<select name="favcat"><option value="2" selected>Reading</option></select><textarea name="favnote">A &amp; B</textarea>');
   });
   const response=await POST(request('/api/source',{method:'POST',logged:true,body:{action:'favorite',gid:1,token:'abcdef',group:2,note:'A & B'}}));
-  assert.deepEqual(await response.json(),{saved:true});assert.equal(calls.length,3);
+  assert.deepEqual(await response.json(),{saved:true});assert.equal(calls.length,4);
   const body=new URLSearchParams(calls[0].options.body);assert.equal(body.get('favcat'),'2');assert.equal(body.get('favnote'),'A & B');
   assert.equal(calls[1].options.method,'GET');assert.equal(calls[1].options.body,undefined);
 });
@@ -96,9 +97,9 @@ test('comment publishing confirms a new source comment and supports native forma
 });
 
 test('saved favorite notes and group selection are read before editing',async t=>{
-  t.mock.method(globalThis,'fetch',async()=>new Response('<select name="favcat"><option value="0">First</option><option value="2" selected>Reading</option></select><textarea name="favnote">Existing &amp; note</textarea>'));
+  t.mock.method(globalThis,'fetch',async url=>new Response(new URL(url).pathname.startsWith('/g/')?'<a id="favoritelink">Reading</a>':'<select name="favcat"><option value="0">First</option><option value="2" selected>Reading</option></select><textarea name="favnote">Existing &amp; note</textarea>'));
   const result=await GET(request('/api/source?action=favorite-info&gid=1&token=abcdef',{logged:true}));
-  assert.deepEqual(await result.json(),{groups:[{id:0,name:'First'},{id:2,name:'Reading'}],group:2,note:'Existing & note'});
+  assert.deepEqual(await result.json(),{groups:[{id:0,name:'First'},{id:2,name:'Reading'}],saved:true,group:2,note:'Existing & note'});
 });
 
 test('tag preferences update native source fields and return no source keys',async t=>{
@@ -145,16 +146,22 @@ test('advanced search and quick tags preserve namespaces, prioritize followed ta
 
 
 test('a successful HTTP response without a confirmed favorite remains a failure',async t=>{
-  t.mock.method(globalThis,'fetch',async(url,options)=>new Response(options.method==='POST'?'<p>Favorite limit reached</p>':'<select name="favcat"><option value="0">First</option></select>'));
+  t.mock.method(globalThis,'fetch',async(url,options)=>new Response(options.method==='POST'?'<p>Favorite limit reached</p>':new URL(url).pathname.startsWith('/g/')?'<a id="favoritelink">Add to Favorites</a>':'<select name="favcat"><option value="0" selected>First</option></select>'));
   const response=await POST(request('/api/source',{method:'POST',logged:true,body:{action:'favorite',gid:1,token:'abcdef',group:0}}));
   assert.equal(response.status,400);assert.match((await response.json()).error,/未确认/);
 });
 
 test('favorite removal is successful only after the source no longer selects a favorite group',async t=>{
   let removed=false;
-  t.mock.method(globalThis,'fetch',async(url,options)=>new Response(options.method==='POST'?'<p>Saved</p>':`<select name="favcat"><option value="0" ${removed?'':'selected'}>First</option></select>`));
+  t.mock.method(globalThis,'fetch',async(url,options)=>new Response(options.method==='POST'?'<p>Saved</p>':new URL(url).pathname.startsWith('/g/')?`<a id="favoritelink">${removed?'Add to Favorites':'First'}</a>`:'<select name="favcat"><option value="0" selected>First</option></select>'));
   const input={action:'favorite',gid:1,token:'abcdef',remove:true};
   assert.equal((await POST(request('/api/source',{method:'POST',logged:true,body:input}))).status,400);
   removed=true;const response=await POST(request('/api/source',{method:'POST',logged:true,body:input}));
   assert.equal(response.status,200);assert.deepEqual(await response.json(),{saved:false});
+});
+
+test('a default selected favorite group is not proof that the gallery is already favorited',async t=>{
+ t.mock.method(globalThis,'fetch',async url=>new Response(new URL(url).pathname.startsWith('/g/')?'<a id="favoritelink"><img src="icon.gif"> Add to Favorites</a>':'<input type="radio" name="favcat" value="0" checked><textarea name="favnote"></textarea>'));
+ const response=await GET(request('/api/source?action=favorite-info&gid=1&token=abcdef',{logged:true}));
+ const info=await response.json();assert.equal(response.status,200);assert.equal(info.saved,false);assert.equal(info.group,null);
 });

@@ -4,7 +4,7 @@ import {Favorites,favoriteMatches} from '../public/favorites.mjs';
 const gallery=(id='1/abcdef',source='e-hentai')=>({id,gid:1,token:'abcdef',source,title:'Fixture One',creator:'Artist',tags:['artist:one piece'],pages:[{src:'unused'}]});
 function setup({scope=null,state={favorites:[]},fail=false,info={group:null,note:''}}={}){
  const calls=[];let current=scope,broken=fail;
- const store=new Favorites({state,save:()=>{},getScope:()=>current,ensureScope:async()=>current,request:async(path,options)=>{calls.push({path,options});if(broken)throw Error('Source unavailable');return options?{saved:true}:info;}});
+ const store=new Favorites({state,save:()=>{},getScope:()=>current,ensureScope:async()=>current,request:async(path,options)=>{calls.push({path,options});if(broken)throw Error('Source unavailable');return options?{saved:!JSON.parse(options.body).remove}:{saved:Number.isInteger(info.group),...info};}});
  return {store,state,calls,setScope:value=>{current=value;},setFail:value=>{broken=value;}};
 }
 test('missing credentials retain a local snapshot across account changes without upstream writes',async()=>{
@@ -39,10 +39,10 @@ test('merged source favorites deduplicate local entries and ignore stale account
  await store.set(gallery('2/bbcdef'),{group:0});setScope('account-b');store.ingest([gallery()],'account-a');assert.equal(store.has('1/abcdef'),false);
  store.ingest([gallery('3/cccdef')],'account-b');assert.equal(store.has('3/cccdef'),true);
 });
-test('concurrent taps share a single operation, and failed removal stays hidden on refresh',async()=>{
+test('concurrent taps share a single operation, and failed source removal keeps the confirmed favorite',async()=>{
  const {store,state,setFail}=setup({scope:'account-a'});const first=store.set(gallery());assert.equal(store.set(gallery()),first);await first;
- setFail(true);await store.set(gallery(),{remove:true});assert.equal(store.has('1/abcdef'),false);
- store.ingest([gallery()],'account-a');assert.equal(store.has('1/abcdef'),false);assert.deepEqual(state.favorites,[]);
+ setFail(true);await store.set(gallery(),{remove:true});assert.equal(store.has('1/abcdef'),true);
+ store.ingest([gallery()],'account-a');assert.equal(store.has('1/abcdef'),true);assert.deepEqual(state.favorites,[]);
  setFail(false);await store.set(gallery(),{remove:true});assert.equal(store.has('1/abcdef'),false);assert.deepEqual(state.favoritePending,{});
 });
 test('source-authoritative refresh and source-qualified IDs preserve account and gallery isolation',()=>{
@@ -61,4 +61,48 @@ test('an account switch during a successful write neither creates a local backup
 test('private favorites preserve their source when submitting the synchronized operation',async()=>{
  const {store,calls}=setup({scope:'account-a'});await store.set(gallery('ex/1/abcdef','exhentai'));
  assert.equal(JSON.parse(calls.at(-1).options.body).source,'exhentai');assert.equal(store.has('1/abcdef'),false);assert.equal(store.has('ex/1/abcdef'),true);
+});
+
+test('favorite selection waits for completion, while an unsuccessful save becomes local only after loading ends',async()=>{
+ let finish;const state={favorites:[]};
+ const store=new Favorites({state,save:()=>{},getScope:()=> 'account-a',ensureScope:async()=> 'account-a',request:async(path,options)=>{
+  if(!options)return {group:null};await new Promise(resolve=>{finish=resolve;});throw Error('Source declined');
+ }});
+ const task=store.set(gallery());assert.equal(store.busy('1/abcdef'),true);assert.equal(store.has('1/abcdef'),false);
+ while(!finish)await new Promise(resolve=>setImmediate(resolve));assert.equal(store.has('1/abcdef'),false);
+ finish();assert.equal((await task).synced,false);assert.equal(store.busy('1/abcdef'),false);assert.equal(store.localOnly('1/abcdef'),true);
+});
+
+test('unfavoriting preserves the confirmed selection until the source operation completes',async()=>{
+ let finish;const store=new Favorites({state:{favorites:[]},save:()=>{},getScope:()=> 'account-a',ensureScope:async()=> 'account-a',request:async()=>{await new Promise(resolve=>{finish=resolve;});return {saved:false};}});
+ store.ingest([gallery()],'account-a');const task=store.set(gallery(),{remove:true});
+ assert.equal(store.has('1/abcdef'),true);assert.equal(store.removing('1/abcdef'),true);
+ while(!finish)await new Promise(resolve=>setImmediate(resolve));finish();await task;assert.equal(store.has('1/abcdef'),false);
+});
+
+test('reading source favorite status reconciles both saved and removed states without duplicating local data',()=>{
+ const {store,state}=setup({scope:'account-a'});store.confirm(gallery(),{saved:true,group:2,note:'Saved'},'account-a');
+ assert.equal(store.has('1/abcdef'),true);assert.equal(store.statusKnown('1/abcdef'),true);assert.deepEqual(state.favorites,[]);
+ store.confirm(gallery(),{group:null,note:''},'account-a');assert.equal(store.has('1/abcdef'),false);assert.equal(store.statusKnown('1/abcdef'),true);
+});
+
+test('a favorite confirmed by the source survives a first page that does not include it',async()=>{
+ const {store,state,setScope}=setup({scope:'account-a'});await store.set(gallery());
+ store.resetRemote('e-hentai');store.ingest([gallery('2/bbcdef')],'account-a');
+ assert.equal(store.has('1/abcdef'),true);assert.equal(store.remote('1/abcdef'),true);assert.equal(store.galleries('e-hentai')[0].id,'1/abcdef');
+ assert.deepEqual(state.favorites,[]);assert.deepEqual(state.favoriteMeta,{});
+ store.confirm(gallery(),{group:null},'account-a');assert.equal(store.has('1/abcdef'),false);
+ setScope('account-b');assert.equal(store.has('2/bbcdef'),false);
+});
+
+test('a preselected form group without a saved source flag still performs the favorite write',async()=>{
+ const {store,calls}=setup({scope:'account-a',info:{saved:false,group:0,note:''}});
+ assert.equal((await store.set(gallery())).synced,true);assert.equal(calls.length,2);assert.equal(calls[1].options.method,'POST');
+ store.confirm(gallery('2/bbcdef'),{saved:false,group:0},'account-a');assert.equal(store.has('2/bbcdef'),false);
+});
+
+test('navigation snapshots are not fresh source confirmation and cannot delete a local fallback',()=>{
+ const {store,state}=setup({scope:'account-a',state:{favorites:['1/abcdef']}});store.remember(gallery());
+ store.ingest([gallery()],'account-a',{cached:true});assert.equal(store.statusKnown('1/abcdef'),false);assert.deepEqual(state.favorites,['1/abcdef']);
+ store.confirm(gallery(),{saved:false,group:0},'account-a');assert.equal(store.remote('1/abcdef'),false);assert.equal(store.localOnly('1/abcdef'),true);
 });

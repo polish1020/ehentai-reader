@@ -33,7 +33,7 @@ export class SourceFeatures {
   mountGallery(gallery,root) {
     this.gallery=gallery;
     const tools=document.createElement('div');tools.className='gallery-tools';
-    tools.innerHTML=button('community',`${icon('star')}评分与评论`)+button('gallery-favorite',`${icon('heart')}收藏设置`)+button('downloads',`${icon('download')}下载`)+button('gallery-tags',`${icon('tag')}标签操作`);
+    tools.innerHTML=button('community',`${icon('star')}评分与评论`)+button('downloads',`${icon('download')}下载`)+button('gallery-tags',`${icon('tag')}标签操作`);
     root.querySelector('.gallery-summary')?.after(tools);
   }
   modal(title,body) {
@@ -153,6 +153,8 @@ export class SourceFeatures {
       if(filters.f_spf&&filters.f_spt&&Number(filters.f_spf)>Number(filters.f_spt))throw new Error('最少页数不能大于最多页数');
       this.dialog.close();return this.onSearch(query,filters);
     }
+    const submitHTML=submitter?.innerHTML;
+    if(kind==='favorite'&&submitter){submitter.setAttribute('aria-busy','true');submitter.innerHTML='<span class="loading-spinner" aria-hidden="true"></span><span>正在提交…</span>';}
     const buttons=[...form.querySelectorAll('button')];buttons.forEach(button=>{button.disabled=true;});this.status('正在提交…');
     try {
       if(kind==='image') {
@@ -176,6 +178,6 @@ export class SourceFeatures {
       await this.post(kind,data);if(!valid()||scope!==this.getScope())return;
       if(kind==='comment'){await this.openCommunity();this.status('评论已发布到源站');}
       else this.status(kind==='rating'?'评分已保存到源站':'标签投票已保存到源站');
-    }finally{buttons.forEach(button=>{button.disabled=false;});}
+    }finally{buttons.forEach(button=>{button.disabled=false;});if(kind==='favorite'&&submitter?.isConnected){submitter.setAttribute('aria-busy','false');submitter.innerHTML=submitHTML;}}
   }
 }
