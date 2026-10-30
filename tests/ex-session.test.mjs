@@ -73,3 +73,14 @@ test('cross-site session writes and arbitrary thumbnail destinations are rejecte
   const cleared=DELETE(makeRequest('/api/ex-session',{method:'DELETE'}));
   assert.match(cleared.headers.get('set-cookie'),/Max-Age=0/);
 });
+
+test('a transient thumbnail connection failure is retried once',async t => {
+  let attempts=0;
+  t.mock.method(globalThis,'fetch',async () => {
+    if (++attempts === 1) throw new TypeError('fetch failed');
+    return new Response('image',{headers:{'Content-Type':'image/webp'}});
+  });
+  const response=await thumbnail(makeRequest('/api/thumbnail?src=https%3A%2F%2Fs.exhentai.org%2Fw%2Ffixture.webp',{cookie:fixtureCookie()}));
+  assert.equal(response.status,200);assert.equal(await response.text(),'image');
+  assert.equal(attempts,2);
+});
