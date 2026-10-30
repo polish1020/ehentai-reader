@@ -475,14 +475,21 @@ function sendImageContext() {
     worker.postMessage({type:'image-context',source,scope:exSession.scope},[channel.port2]);
   });
 }
-async function refreshExSession() {
-  const request = ++authRequest, checked = await requestExSession();
-  if (request === authRequest) { exSession = checked; setExScope(exSession.scope); sendImageContext(); }
+async function refreshExSession({fillForm=false}={}) {
+  const form = $('#ex-credentials-form');
+  const initial = fillForm ? Object.fromEntries(new FormData(form)) : null;
+  const request = ++authRequest, {credentials,...checked} = await requestExSession(undefined,fillForm);
+  if (request === authRequest) {
+    exSession = checked; setExScope(exSession.scope); sendImageContext();
+    if (fillForm && $('#settings-dialog').open) for (const input of form.querySelectorAll('input[name]')) {
+      if (input.value === initial[input.name]) input.value = credentials?.[input.name] || '';
+    }
+  }
   return exSession;
 }
-function requestExSession(options) {
+function requestExSession(options,fillForm=false) {
   // Complete any cookie renewal before a save or deletion can change the session.
-  const request = authQueue.then(() => requestJSON('/api/ex-session',options));
+  const request = authQueue.then(() => requestJSON('/api/ex-session'+(fillForm ? '?credentials=1' : ''),options));
   authQueue = request.catch(() => {});
   return request;
 }
@@ -513,6 +520,7 @@ async function clearExSession() {
     await clearPrivateImageCaches().catch(() => {});
     navigator.serviceWorker?.controller?.postMessage({type:'clear-private-images',scope:exSession.scope});
     exSession = {configured:false,scope:null}; setExScope(null); purgeExLists();
+    $('#ex-credentials-form').reset();
     if (state.source === 'exhentai' || list.source === 'exhentai') switchSource('e-hentai');
     updateSourceSettings(); $('#ex-session-status').textContent = '已清除凭证和对应的私有图片缓存。';
   } catch (error) { $('#ex-session-status').textContent = error.message; }
@@ -532,6 +540,7 @@ $('#ex-credentials-form').addEventListener('submit',async event => {
     const oldScope = exSession.scope;
     if (oldScope) await clearImageCaches(oldScope).catch(() => {});
     purgeExLists(); exSession = checked; setExScope(checked.scope); form.reset(); updateSourceSettings(); sendImageContext();
+    await refreshExSession({fillForm:true});
     $('#ex-session-status').textContent = checked.refreshedIgneous ? '验证成功，已自动更新 igneous 并保存到本机。关闭浏览器后仍可使用。' : '验证成功，凭证已保存到本机。关闭浏览器后仍可使用。';
     if (list.source === 'exhentai') navigate('list',lists.create(route(),list.query,'exhentai'));
   } catch (error) { $('#ex-session-status').textContent = error.message; }
@@ -556,12 +565,13 @@ function applyCategories() {
   toast('已应用全局分类');
 }
 function settings() {
-  updateSourceSettings(); refreshExSession().then(updateSourceSettings).catch(() => {}); updateImageCount();
+  updateSourceSettings(); refreshExSession({fillForm:true}).then(updateSourceSettings).catch(error => { $('#ex-session-status').textContent = error.message; }); updateImageCount();
   $('#category-options').innerHTML = categories.map(category => `<label class="category-option"><input type="checkbox" name="category" value="${escape(category.name)}" ${state.categories.includes(category.name) ? 'checked' : ''}><span>${escape(category.name)}<small>${escape(category.label)}</small></span></label>`).join('');
   categoryCount();
   $('#mode-setting').value = state.mode; $('#direction-setting').value = state.direction; $('#theme-setting').value = state.theme;
   $('#source-info').textContent = `当前来源：${sourceName(list.source)}。返回时保留列表，点击刷新可获取最新信息。已缓存图片可从本机读取，未缓存图片需要网络。`;
   $('#settings-dialog').showModal();
+  $('#settings-dialog').scrollTop = 0;
 }
 document.addEventListener('click', event => {
   const link = event.target.closest('a[href^="#"]');

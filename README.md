@@ -36,7 +36,7 @@ node scripts/serve.mjs dist
 
 在“阅读偏好 → 内容源与凭证”中填写 `ipb_member_id`、`ipb_pass_hash`、`ipb_session_id`，可选填 `igneous`。点击“验证并保存”后，只有源站访问验证通过才可切换到 ExHentai。失效的 `igneous` 会尝试使用基础凭证重新取得。
 
-凭证通过同源 HTTPS 提交，保存在本机浏览器的 `Secure`、`HttpOnly`、`SameSite=Strict` 持久 Cookie 中，有效期一年，检查会话时自动续期。关闭浏览器后仍可恢复；现有会话会自动升级，保留私有图片缓存。输入框不会回显凭证，留空不代表删除。凭证不写入 localStorage、sessionStorage、Git 或 URL，也不在服务器数据库中保存。可以随时点击“清除凭证”；清除浏览器数据或源站凭证失效后需要重新验证。ExHentai 与 E-Hentai 使用相同的 10 个顶级分类和筛选编号。
+凭证通过同源 HTTPS 提交，保存在本机浏览器的 `Secure`、`HttpOnly`、`SameSite=Strict` 持久 Cookie 中，有效期一年，检查会话时自动续期。关闭浏览器后仍可恢复；现有会话会自动升级，保留私有图片缓存。凭证设置位于阅读偏好最底部；打开设置时以密码输入框回填已保存凭证，可直接修改并更新，关闭设置后清空表单。只有设置页的同源请求会读取凭证，接口响应不缓存。凭证不写入 localStorage、sessionStorage、Git 或 URL，也不在服务器数据库中保存。可以随时点击“清除凭证”；清除浏览器数据或源站凭证失效后需要重新验证。ExHentai 与 E-Hentai 使用相同的 10 个顶级分类和筛选编号。
 
 ## 实时接口
 

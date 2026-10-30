@@ -58,6 +58,23 @@ test('existing session cookies become persistent without another upstream reques
   assert.match(restored.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Strict/);
 });
 
+test('only an explicit same-origin settings request can refill saved credentials',async t => {
+  t.mock.method(console,'error',() => {});
+  t.mock.method(globalThis,'fetch',async()=>{throw new Error('Refilling the form must not contact the source');});
+  const cookie=fixtureCookie();
+  const status=await GET(makeRequest('/api/ex-session',{cookie}));
+  assert.equal((await status.json()).credentials,undefined);
+  const saved=await GET(makeRequest('/api/ex-session?credentials=1',{cookie,origin:'https://reader.example'}));
+  assert.deepEqual((await saved.json()).credentials,credentials);
+  assert.equal(saved.headers.get('cache-control'),'no-store');
+  assert.equal(saved.headers.get('vary'),'Cookie');
+  const denied=await GET(makeRequest('/api/ex-session?credentials=1',{cookie,origin:'https://unrelated.example'}));
+  assert.equal(denied.status,403);
+  assert.equal((await denied.json()).credentials,undefined);
+  const missing=await GET(makeRequest('/api/ex-session?credentials=1'));
+  assert.deepEqual(await missing.json(),{configured:false,scope:null});
+});
+
 test('private credentials reach only ExHentai requests and never the public source',async t => {
   const calls=[];
   t.mock.method(globalThis,'fetch',async (url,options) => {

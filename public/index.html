@@ -31,19 +31,6 @@
   <dialog id="detail-dialog" class="detail-dialog"><div id="detail-body"></div></dialog>
   <dialog id="settings-dialog" class="settings-dialog">
     <div class="dialog-header"><h2>阅读偏好</h2><button class="icon-button" data-action="close-settings" aria-label="关闭">✕</button></div>
-    <section class="source-settings" aria-labelledby="source-settings-title">
-      <h3 id="source-settings-title">内容源与凭证</h3>
-      <label class="setting-row source-select">当前内容源<select id="source-setting"><option value="e-hentai">E-Hentai</option><option value="exhentai" disabled>ExHentai（需要凭证）</option></select></label>
-      <p class="setting-help">凭证验证后保存在本机浏览器，关闭后重新打开仍可使用，有效期一年，使用时自动续期。输入框留空不影响已保存凭证；清除浏览器数据或源站凭证失效后需重新输入。</p>
-      <form id="ex-credentials-form" autocomplete="off">
-        <label class="credential-field">ipb_member_id<input name="ipb_member_id" type="password" autocomplete="off" required></label>
-        <label class="credential-field">ipb_pass_hash<input name="ipb_pass_hash" type="password" autocomplete="off" required></label>
-        <label class="credential-field">ipb_session_id<input name="ipb_session_id" type="password" autocomplete="off" required></label>
-        <label class="credential-field">igneous <small>选填，可自动更新</small><input name="igneous" type="password" autocomplete="off"></label>
-        <div class="source-actions"><button type="submit" class="primary-button" id="verify-ex">验证并保存到本机</button><button type="button" class="outline-button" data-action="clear-ex-session">清除凭证</button></div>
-      </form>
-      <p id="ex-session-status" class="setting-help" role="status">输入凭证后验证。</p>
-    </section>
     <fieldset class="category-settings">
       <legend>全局筛选分类</legend>
       <p class="setting-help">使用 E-Hentai 顶级分类，可多选。应用于发现、搜索、收藏和足迹，保存在当前浏览器。</p>
@@ -57,6 +44,19 @@
     <section class="image-cache-settings" aria-labelledby="image-cache-title"><h3 id="image-cache-title">本地图片缓存</h3><p class="setting-help">阅读时预载前后各 5 张图片，已加载的封面和原图优先从浏览器缓存读取。每个来源会话最多保留 200 张；ExHentai 缓存随凭证清除。</p><div class="source-actions"><span id="image-cache-count" role="status">正在统计…</span><button class="outline-button" data-action="clear-image-cache">清除图片缓存</button></div></section>
     <div class="settings-note"><b>在 iPhone 上使用</b><p>用 Safari 打开，点击分享按钮 →「添加到主屏幕」，即可全屏使用。收藏与进度保存在当前浏览器，不会跨设备同步。</p><b>关于内容源</b><p id="source-info">正在读取内容目录…</p><p>交互参考 EhPanda 与 JHentai，独立实现，未复制其源代码或素材。</p></div>
     <button class="danger-button" data-action="clear-history">清除本机阅读记录</button>
+    <section class="source-settings" aria-labelledby="source-settings-title">
+      <h3 id="source-settings-title">内容源与凭证</h3>
+      <label class="setting-row source-select">当前内容源<select id="source-setting"><option value="e-hentai">E-Hentai</option><option value="exhentai" disabled>ExHentai（需要凭证）</option></select></label>
+      <p class="setting-help">凭证验证后保存在本机浏览器，关闭后重新打开仍可使用，有效期一年，使用时自动续期。已保存凭证会以密码圆点回填，可直接修改后更新；清除浏览器数据或源站凭证失效后需重新输入。</p>
+      <form id="ex-credentials-form" autocomplete="off">
+        <label class="credential-field">ipb_member_id<input name="ipb_member_id" type="password" autocomplete="off" required></label>
+        <label class="credential-field">ipb_pass_hash<input name="ipb_pass_hash" type="password" autocomplete="off" required></label>
+        <label class="credential-field">ipb_session_id<input name="ipb_session_id" type="password" autocomplete="off" required></label>
+        <label class="credential-field">igneous <small>选填，可自动更新</small><input name="igneous" type="password" autocomplete="off"></label>
+        <div class="source-actions"><button type="submit" class="primary-button" id="verify-ex">验证并保存到本机</button><button type="button" class="outline-button" data-action="clear-ex-session">清除凭证</button></div>
+      </form>
+      <p id="ex-session-status" class="setting-help" role="status">输入凭证后验证。</p>
+    </section>
   </dialog>
   <section id="reader" class="reader" hidden aria-label="图集阅读器">
     <header class="reader-top"><button class="icon-button" data-action="exit-reader" aria-label="退出阅读">←</button><div><b id="reader-title"></b><small id="reader-source"></small></div><button class="icon-button" data-action="reader-mode" aria-label="切换阅读方式">▤</button><button class="icon-button" data-action="reader-favorite" aria-label="收藏图集" id="reader-favorite">♡</button></header>

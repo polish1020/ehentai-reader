@@ -2,11 +2,15 @@ import {cleanCredentials,readSession,sessionCookie,clearSessionCookie,sameOrigin
 import {verifyExSession,json,apiError} from '../lib/ehentai.mjs';
 
 export function GET(request) {
-  const session=readSession(request);
-  if (!session?.scope) return json({configured:false,scope:null});
-  // Upgrade existing session cookies and renew persistence without rotating private caches.
-  const saved=sessionCookie(session.credentials,session.scope);
-  return Response.json({configured:true,scope:saved.scope},{headers:{'Cache-Control':'no-store','Set-Cookie':saved.cookie}});
+  try {
+    const fillForm=new URL(request.url).searchParams.get('credentials') === '1';
+    if (fillForm) sameOrigin(request);
+    const session=readSession(request);
+    if (!session?.scope) return json({configured:false,scope:null});
+    // Only the settings form requests credentials; routine status checks never expose them.
+    const saved=sessionCookie(session.credentials,session.scope);
+    return Response.json({configured:true,scope:saved.scope,...(fillForm ? {credentials:session.credentials} : {})},{headers:{'Cache-Control':'no-store','Vary':'Cookie','Set-Cookie':saved.cookie}});
+  } catch (error) { return apiError(error); }
 }
 export async function POST(request) {
   try {
