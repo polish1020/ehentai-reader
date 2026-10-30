@@ -26,13 +26,16 @@ export class ThumbnailView {
     this.container=container;this.store=store;this.visible=new Set();
     this.draw=()=>this.visible.forEach(node=>this.render(node));
     store.listeners.add(this.draw);
+    // Prepare two screens around the album and one screen around the filmstrip.
+    const vertical=Math.max(800,Math.round((root?.clientHeight||innerHeight)*2));
+    const horizontal=Math.max(400,Math.round(root?.clientWidth||innerWidth));
     this.observer=new IntersectionObserver(entries=>{
       for (const entry of entries) if (entry.isIntersecting) {
         this.visible.add(entry.target);
         const index=Number(entry.target.dataset.thumb);
         store.ensure(index).then(()=>this.render(entry.target)).catch(()=>{entry.target.dataset.thumbError='true';});
       } else this.visible.delete(entry.target);
-    },{root,rootMargin:'200px'});
+    },{root,rootMargin:`${vertical}px ${horizontal}px`});
     container.querySelectorAll('[data-thumb]').forEach(node=>this.observer.observe(node));
     this.resize=new ResizeObserver(entries=>entries.forEach(entry=>this.render(entry.target)));
     container.querySelectorAll('[data-thumb]').forEach(node=>this.resize.observe(node));this.draw();
