@@ -25,7 +25,7 @@ export class ListStore {
     } catch { /* Browsing continues when session storage is unavailable. */ }
   }
   create(view='discover',query='',source='e-hentai') {
-    const list={key:crypto.randomUUID(),view,query,source,sort:view === 'discover' ? 'source' : 'newest',discoveryVersion:2,discoveryContinuation:false,discoveryLatest:false,popularIds:[],listMode:false,galleries:[],nextCursor:null,isLoading:false,listError:'',scrollY:0,initialized:false,categoryKey:null,pendingAppend:false};
+    const list={key:crypto.randomUUID(),view,query,source,feed:view==='discover'?'popular':'latest',filters:{},favoriteMode:'local',sort:view === 'discover' ? 'source' : 'newest',discoveryVersion:2,discoveryContinuation:false,discoveryLatest:false,popularIds:[],listMode:false,galleries:[],nextCursor:null,isLoading:false,listError:'',scrollY:0,initialized:false,categoryKey:null,pendingAppend:false};
     this.lists.set(list.key,list);
     return list;
   }

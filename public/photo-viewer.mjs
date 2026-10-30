@@ -1,3 +1,4 @@
+import {icon} from './icons.mjs';
 import {ReaderPreloader,preloadNeighbors} from './reader-preload.mjs';
 import {ThumbnailView} from './photo-thumbnails.mjs';
 
@@ -5,7 +6,7 @@ const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 export class PhotoViewer {
   constructor(root,callbacks) {
     this.root=root;this.callbacks=callbacks;this.index=0;this.gallery=null;
-    root.innerHTML='<header class="photo-header"><button class="photo-back" data-photo-action="back" aria-label="返回图集">‹</button><div><b class="photo-title"></b><small class="photo-count"></small></div><button class="photo-reading" data-photo-action="continuous" aria-label="切换上下连续阅读">连续</button><button class="photo-expand" data-photo-action="fullscreen" aria-label="全屏查看">⛶</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 下滑返回图集</span>';
+    root.innerHTML=`<header class="photo-header"><button class="photo-back" data-photo-action="back" aria-label="返回图集">${icon('back')}</button><div><b class="photo-title"></b><small class="photo-count"></small></div><button class="photo-reading" data-photo-action="continuous" aria-label="切换上下连续阅读">连续</button><button class="photo-expand" data-photo-action="fullscreen" aria-label="全屏查看">${icon('expand')}</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 下滑返回图集</span>`;
     this.track=root.querySelector('.photo-track');this.strip=root.querySelector('.photo-strip');
     root.addEventListener('click',event=>{
       const thumbnail=event.target.closest('[data-photo-index]');

@@ -7,8 +7,9 @@ import * as exSession from '../api/ex-session.js';
 import * as metadata from '../api/metadata.js';
 import {GET as thumbnail} from '../api/thumbnail.js';
 import {GET as pages} from '../api/pages.js';
+import * as source from '../api/source.js';
 const root=resolve(process.argv[2] || 'public');
-const routes={'/api/galleries':{GET:galleries},'/api/image':{GET:image},'/api/pages':{GET:pages},'/api/thumbnail':{GET:thumbnail},'/api/ex-session':exSession,'/api/metadata':metadata};
+const routes={'/api/galleries':{GET:galleries},'/api/image':{GET:image},'/api/pages':{GET:pages},'/api/thumbnail':{GET:thumbnail},'/api/ex-session':exSession,'/api/metadata':metadata,'/api/source':source};
 const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
 export function createApp() {
   return createServer(async (req,res) => {
