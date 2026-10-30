@@ -23,7 +23,7 @@ export class ThumbnailStore {
 
 export class ThumbnailView {
   constructor(container,root,store) {
-    this.container=container;this.store=store;this.visible=new Set();
+    this.container=container;this.store=store;this.visible=new Set();this.closed=false;
     this.draw=()=>this.visible.forEach(node=>this.render(node));
     store.listeners.add(this.draw);
     // Prepare two screens around the album and one screen around the filmstrip.
@@ -33,7 +33,7 @@ export class ThumbnailView {
       for (const entry of entries) if (entry.isIntersecting) {
         this.visible.add(entry.target);
         const index=Number(entry.target.dataset.thumb);
-        store.ensure(index).then(()=>this.render(entry.target)).catch(()=>{entry.target.dataset.thumbError='true';});
+        store.ensure(index).then(()=>this.render(entry.target)).catch(()=>{if(!this.closed)entry.target.dataset.thumbError='true';});
       } else this.visible.delete(entry.target);
     },{root,rootMargin:`${vertical}px ${horizontal}px`});
     container.querySelectorAll('[data-thumb]').forEach(node=>this.observer.observe(node));
@@ -41,20 +41,28 @@ export class ThumbnailView {
     container.querySelectorAll('[data-thumb]').forEach(node=>this.resize.observe(node));this.draw();
   }
   render(node) {
+    if(this.closed || !this.visible.has(node))return;
     const thumb=this.store.pages.get(Number(node.dataset.thumb));
-    if (!thumb || !this.visible.has(node) || !node.clientWidth) return;
-    const signature=JSON.stringify([thumb,node.clientWidth,node.clientHeight]);
-    if (node.dataset.thumbSignature===signature) return;
-    node.dataset.thumbSignature=signature;delete node.dataset.thumbError;
-    node.replaceChildren();
-    if (thumb.sprite) {
-      const sprite=document.createElement('span');sprite.className='thumb-sprite';
-      Object.assign(sprite.style,{width:thumb.width+'px',height:thumb.height+'px',backgroundImage:`url(${JSON.stringify(thumb.src)})`,backgroundPosition:`${thumb.x}px ${thumb.y}px`,transform:`translate(-50%,-50%) scale(${Math.max(node.clientWidth/thumb.width,node.clientHeight/thumb.height)})`});
-      node.append(sprite);
-    } else {
-      const image=new Image();image.src=thumb.src;image.alt='';image.decoding='async';node.append(image);
+    const {width,height}=node.getBoundingClientRect();
+    if (!thumb || !width || !height) return;
+    const signature=JSON.stringify(thumb);
+    // Resizing the selected film animates every frame. Keep its image alive
+    // throughout the animation, and use fractional CSS pixels for the crop.
+    if (node.dataset.thumbSignature!==signature) {
+      node.dataset.thumbSignature=signature;delete node.dataset.thumbError;
+      node.replaceChildren();
+      if (thumb.sprite) {
+        const sprite=document.createElement('span');sprite.className='thumb-sprite';
+        Object.assign(sprite.style,{width:thumb.width+'px',height:thumb.height+'px',backgroundImage:`url(${JSON.stringify(thumb.src)})`,backgroundPosition:`${thumb.x}px ${thumb.y}px`});
+        node.append(sprite);
+      } else {
+        const image=new Image();image.src=thumb.src;image.alt='';image.decoding='async';node.append(image);
+      }
+      node.dataset.thumbReady='true';
     }
-    node.dataset.thumbReady='true';
+    if (thumb.sprite) {
+      node.firstElementChild.style.transform=`translate(-50%,-50%) scale(${Math.max(width/thumb.width,height/thumb.height)})`;
+    }
   }
-  close() {this.observer.disconnect();this.resize.disconnect();this.visible.clear();this.store.listeners.delete(this.draw);}
+  close() {this.closed=true;this.observer.disconnect();this.resize.disconnect();this.visible.clear();this.store.listeners.delete(this.draw);}
 }
