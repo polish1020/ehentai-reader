@@ -5,6 +5,7 @@ import {GET as galleries} from '../api/galleries.js';
 import {GET as image} from '../api/image.js';
 import {parseListing} from '../lib/ehentai.mjs';
 import {createApp} from '../scripts/serve.mjs';
+import {sessionCookie} from '../lib/ex-session.mjs';
 
 const listing='<a href="https://e-hentai.org/g/1/abcdef/">Gallery</a><a href="https://e-hentai.org/g/1/abcdef/">Duplicate</a><a id="unext" href="/?next=100&amp;f_search=test">Next</a>';
 const request=path => new Request(`http://localhost${path}`);
@@ -22,6 +23,37 @@ test('search forwards query, category mask and cursor and returns only IDs for d
   assert.equal(calls[0].url.searchParams.get('next'),'123');
   assert.equal(calls[0].url.searchParams.get('f_cats'),'959');
   assert.deepEqual(await response.json(),{ids:[[1,'abcdef']],next:'100'});
+});
+
+test('discovery uses source popularity with category filters and no pagination, while text searches use normal search',async t => {
+  const calls=[];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{calls.push({url:new URL(url),options});return new Response(listing);});
+  const popular=await galleries(request('/api/galleries?feed=popular&f_cats=959&next=123'));
+  assert.deepEqual(await popular.json(),{ids:[[1,'abcdef']],next:null});
+  assert.equal(calls[0].url.pathname,'/popular');
+  assert.equal(calls[0].url.searchParams.get('f_cats'),'959');
+  assert.equal(calls[0].url.searchParams.get('next'),null);
+  assert.equal(calls[0].options.headers.Cookie,undefined);
+  await galleries(request('/api/galleries?feed=popular&q=artist%3Atest&next=123'));
+  assert.equal(calls[1].url.pathname,'/');
+  assert.equal(calls[1].url.searchParams.get('f_search'),'artist:test');
+  assert.equal(calls[1].url.searchParams.get('next'),'123');
+  await galleries(request('/api/galleries'));
+  assert.equal(calls[2].url.pathname,'/');
+});
+
+test('private popularity requires a session and uses the authenticated ExHentai source',async t => {
+  t.mock.method(console,'error',()=>{});
+  const calls=[];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{calls.push({url:new URL(url),options});return new Response(listing.replaceAll('e-hentai.org','exhentai.org'));});
+  assert.equal((await galleries(request('/api/galleries?source=exhentai&feed=popular'))).status,401);
+  assert.equal(calls.length,0);
+  const cookie=sessionCookie({ipb_member_id:'1',ipb_pass_hash:'fixture-pass',ipb_session_id:'fixture-session'}).cookie.split(';')[0];
+  const response=await galleries(new Request('https://reader.example/api/galleries?source=exhentai&feed=popular&f_cats=959',{headers:{Cookie:cookie}}));
+  assert.deepEqual(await response.json(),{ids:[[1,'abcdef']],next:null});
+  assert.equal(calls[0].url.hostname,'exhentai.org');assert.equal(calls[0].url.pathname,'/popular');
+  assert.equal(calls[0].url.searchParams.get('f_cats'),'959');
+  assert.match(calls[0].options.headers.Cookie,/ipb_pass_hash=fixture-pass/);
 });
 
 test('image resolution locates later thumbnail pages and redirects without relaying image bytes',async t => {

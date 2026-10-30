@@ -9,12 +9,18 @@ export class ListStore {
       const saved=JSON.parse(storage?.getItem(storageKey));
       if (saved?.version === 1) {
         this.tabs=saved.tabs || {};
-        for (const list of saved.lists) { list.source ||= 'e-hentai'; this.lists.set(list.key,list); }
+        for (const list of saved.lists) {
+          list.source ||= 'e-hentai';
+          if (list.view === 'discover' && list.discoveryVersion !== 1) {
+            Object.assign(list,{sort:'source',discoveryVersion:1,galleries:[],nextCursor:null,initialized:false,isLoading:false,pendingAppend:false,scrollY:0});
+          }
+          this.lists.set(list.key,list);
+        }
       }
     } catch { /* Browsing continues when session storage is unavailable. */ }
   }
   create(view='discover',query='',source='e-hentai') {
-    const list={key:crypto.randomUUID(),view,query,source,sort:'newest',listMode:false,galleries:[],nextCursor:null,isLoading:false,listError:'',scrollY:0,initialized:false,categoryKey:null,pendingAppend:false};
+    const list={key:crypto.randomUUID(),view,query,source,sort:view === 'discover' ? 'source' : 'newest',discoveryVersion:1,listMode:false,galleries:[],nextCursor:null,isLoading:false,listError:'',scrollY:0,initialized:false,categoryKey:null,pendingAppend:false};
     this.lists.set(list.key,list);
     return list;
   }

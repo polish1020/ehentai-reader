@@ -36,6 +36,19 @@ test('unavailable session storage preserves in-memory navigation',() => {
   assert.equal(corrupt.lists.size,0);
 });
 
+test('old discovery snapshots switch to popularity once while preserving later explicit sorting choices',() => {
+  const values=new Map();
+  const storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)};
+  values.set('yijing-navigation-v1',JSON.stringify({version:1,tabs:{},lists:[{key:'old',view:'discover',query:'',sort:'newest',galleries:[{id:'1/abcdef'}],initialized:true,isLoading:true,nextCursor:'123',scrollY:200}]}));
+  const store=new ListStore(storage),list=store.lists.get('old');
+  assert.equal(list.sort,'source');assert.equal(list.initialized,false);assert.equal(list.isLoading,false);
+  assert.deepEqual(list.galleries,[]);assert.equal(list.nextCursor,null);assert.equal(list.scrollY,0);
+  list.sort='pages';list.initialized=true;store.save();
+  assert.equal(new ListStore(storage).lists.get('old').sort,'pages');
+  assert.equal(store.create('library').sort,'newest');
+  assert.equal(store.create('discover').sort,'source');
+});
+
 test('source-specific lists stay isolated and clearing ExHentai removes its snapshots',() => {
   const store=new ListStore();
   const publicList=store.create('library','public query');store.activate(publicList);

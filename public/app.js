@@ -5,6 +5,10 @@ import {ReaderPreloader,preloadNeighbors,readerPreference} from './reader-preloa
 import {ThumbnailStore,ThumbnailView} from './photo-thumbnails.mjs';
 import {PhotoViewer} from './photo-viewer.mjs';
 import {imageCacheCount,clearImageCaches,clearPrivateImageCaches} from './image-cache.mjs';
+document.addEventListener('keydown',event => {
+  if (event.key === 'Tab') document.documentElement.dataset.keyboardFocus = 'true';
+},true);
+document.addEventListener('pointerdown',() => { delete document.documentElement.dataset.keyboardFocus; },true);
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const names = {discover:'发现', favorites:'收藏', history:'足迹', library:'全部图集'};
@@ -22,6 +26,7 @@ state.source = state.source === 'exhentai' ? 'exhentai' : 'e-hentai';
 let exSession = {configured:false,scope:null}, authRequest = 0;
 let authQueue = Promise.resolve();
 const sourceName = source => source === 'exhentai' ? 'ExHentai' : 'E-Hentai';
+const popularFeed = target => target.view === 'discover' && !target.query.trim();
 const knownGalleries = new Map(), thumbnailStores = new Map();
 let detailThumbnails, photoRequest = 0;
 let session;
@@ -80,10 +85,13 @@ function filtered() {
   let items = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category) && (route() !== 'favorites' || state.favorites.includes(g.id)) && (route() !== 'history' || state.progress[g.id]));
   const q = list.query.trim().toLowerCase();
   if (q && ['favorites','history'].includes(route())) items = items.filter(g => [g.title,g.creator,...g.tags].join(' ').toLowerCase().includes(q));
-  return items.sort((a,b) => route() === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : list.sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : list.sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
+  return items.sort((a,b) => route() === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : list.sort === 'source' ? 0 : list.sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : list.sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
 }
 function renderResults() {
   if (!$('#gallery-grid')) return;
+  $('#listing-title').textContent = list.query.trim() && !['favorites','history'].includes(route()) ? '搜索结果' : popularFeed(list) ? '源站热门' : names[route()];
+  const sourceSort = $('#sort option[value=source]');
+  if (sourceSort) sourceSort.textContent = popularFeed(list) ? '热门顺序' : '源站顺序';
   const items = filtered(); $('#result-count').textContent = list.isLoading ? '正在请求源站…' : `${items.length} 本图集`;
   $('#gallery-grid').className = `grid ${list.listMode ? 'list-mode' : ''}`;
   const emptyMessages = {favorites:['还没有收藏','点击图集右上角的爱心，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
@@ -94,13 +102,13 @@ function renderResults() {
 function renderHero() {
   const visible = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category));
   const hero = visible[0];
-  $('#hero').innerHTML = route() === 'discover' && hero ? `<section class="hero"><div class="hero-copy"><span class="hero-tag">✧ 实时发现 · ${escape(sourceName(list.source))}</span><h2>翻开新的世界<br>发现此刻的灵感</h2><p>从喜欢的作品出发，<br>收藏每一次新的相遇。</p><button class="primary-button" data-open="${escape(hero.id)}">翻开图集 <span>↗</span></button></div><img class="hero-art" src="${escape(imageFor(hero))}" alt="${escape(hero.title)}"><span class="hero-edition">YOUR GALLERY READER</span></section>` : '';
+  $('#hero').innerHTML = popularFeed(list) && hero ? `<section class="hero"><div class="hero-copy"><span class="hero-tag">✧ 源站热门 · ${escape(sourceName(list.source))}</span><h2>此刻，大家都在看</h2><p>最近 24 小时发布的热门图集，<br>按源站实时热度发现新作品。</p><button class="primary-button" data-open="${escape(hero.id)}">翻开图集 <span>↗</span></button></div><img class="hero-art" src="${escape(imageFor(hero))}" alt="${escape(hero.title)}"><span class="hero-edition">YOUR GALLERY READER</span></section>` : '';
   const tags = [...new Set(visible.flatMap(g => g.tags))].slice(0,5);
   $('#tag-filters').innerHTML = ['全部',...tags].map(tag => { const active = tag === '全部' ? !list.query : list.query === tagQuery(tag); return `<button class="chip ${active ? 'active' : ''}" ${tag === '全部' ? 'data-action="clear-search"' : `data-search-tag="${escape(tag)}"`} aria-pressed="${active}">${escape(tag)}</button>`; }).join('');
 }
 function render() {
-  nav(); const view = route(), titles = {discover:['每一次翻阅，都是新的发现。','实时浏览图集，挑一本慢慢翻阅。'], favorites:['收藏你的心动瞬间。','喜欢的作品，在这里重逢。'], history:['从上次停下的地方，继续。','每一段阅读，都值得被记住。'], library:['属于你的，图像世界。','搜索源站图集，寻找下一次灵感。']};
-  $('#main').innerHTML = `<div class="heading-row"><div><div class="eyebrow">${view === 'discover' ? 'A QUIET SPACE FOR YOUR INSPIRATION' : 'YOUR PERSONAL COLLECTION'}</div><h1>${titles[view][0]}</h1><p class="intro">${titles[view][1]}</p></div><span class="date-note">A little escape, a new perspective.</span></div><div id="hero"></div><section aria-label="图集列表"><div class="section-heading"><h2>${view === 'discover' ? '最新图集' : names[view]}<small id="result-count"></small></h2><div class="view-options"><button class="category-button" data-action="settings" aria-label="设置全局分类">分类 · ${state.categories.length === categories.length ? '全部' : state.categories.length}</button><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">↻</button><select id="sort" aria-label="图集排序"><option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${list.listMode ? '▦' : '☷'}</button></div></div><div class="toolbar"><div id="tag-filters" class="chips"></div><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="${['favorites','history'].includes(view) ? '搜索当前列表' : `搜索 ${sourceName(list.source)} 图集或粘贴图集链接`}" value="${escape(list.query)}" aria-label="搜索图集"></label></div><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
+  nav(); const view = route(), titles = {discover:['发现此刻的热门。',`来自 ${sourceName(list.source)} Popular，保留源站热度顺序，应用你的全局分类。`], favorites:['收藏你的心动瞬间。','喜欢的作品，在这里重逢。'], history:['从上次停下的地方，继续。','每一段阅读，都值得被记住。'], library:['属于你的，图像世界。','搜索源站图集，寻找下一次灵感。']};
+  $('#main').innerHTML = `<div class="heading-row"><div><div class="eyebrow">${view === 'discover' ? 'A QUIET SPACE FOR YOUR INSPIRATION' : 'YOUR PERSONAL COLLECTION'}</div><h1>${titles[view][0]}</h1><p class="intro">${titles[view][1]}</p></div><span class="date-note">A little escape, a new perspective.</span></div><div id="hero"></div><section aria-label="图集列表"><div class="section-heading"><h2><span id="listing-title">${view === 'discover' ? '源站热门' : names[view]}</span><small id="result-count"></small></h2><div class="view-options"><button class="category-button" data-action="settings" aria-label="设置全局分类">分类 · ${state.categories.length === categories.length ? '全部' : state.categories.length}</button><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">↻</button><select id="sort" aria-label="图集排序">${view === 'discover' ? '<option value="source">热门顺序</option>' : ''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${list.listMode ? '▦' : '☷'}</button></div></div><div class="toolbar"><div id="tag-filters" class="chips"></div><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="${['favorites','history'].includes(view) ? '搜索当前列表' : `搜索 ${sourceName(list.source)} 图集或粘贴图集链接`}" value="${escape(list.query)}" aria-label="搜索图集"></label></div><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
   $('#sort').value = list.sort; renderHero(); renderResults();
 }
 async function loadGalleries(append=false,target=list) {
@@ -125,8 +133,9 @@ async function loadGalleries(append=false,target=list) {
         const match = search.trim().match(/^https:\/\/(e-hentai|exhentai)\.org\/g\/(\d+)\/([a-f0-9]+)\/?$/);
         if (match) data = {galleries:[await getGallery(match[2],match[3],match[1] === 'exhentai' ? 'exhentai' : 'e-hentai')],next:null};
         else {
-          const listing = await requestJSON(`/api/galleries?${new URLSearchParams({q:search,next:cursor || '',f_cats:String(excludedCategories(selected)),...(source === 'exhentai' ? {source} : {})})}`);
-          data = {galleries:await metadata(listing.ids,source),next:listing.next};
+          const listing = await requestJSON(`/api/galleries?${new URLSearchParams({q:search,next:cursor || '',...(popularFeed(target) ? {feed:'popular'} : {}),f_cats:String(excludedCategories(selected)),...(source === 'exhentai' ? {source} : {})})}`);
+          const details = new Map((await metadata(listing.ids,source)).map(gallery => [gallery.gid,gallery]));
+          data = {galleries:listing.ids.map(([gid]) => details.get(gid)).filter(Boolean),next:listing.next};
         }
       }
       if (request !== target.requestId) return;
@@ -403,7 +412,7 @@ function applyNavigation() {
   list = lists.lists.get(next.listKey);
   if (!list) {
     list = lists.create(next.fallback?.view || next.view,next.fallback?.query || '',next.source || next.fallback?.source || 'e-hentai');
-    Object.assign(list,{sort:next.fallback?.sort || 'newest',listMode:!!next.fallback?.listMode});
+    Object.assign(list,{sort:next.fallback?.sort || list.sort,listMode:!!next.fallback?.listMode});
     entry.listKey = list.key; history.replaceState(entry,'');
   }
   if (list.source === 'exhentai' && !exSession.configured) {

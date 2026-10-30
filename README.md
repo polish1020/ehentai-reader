@@ -19,7 +19,8 @@ node scripts/serve.mjs dist
 
 ## 使用
 
-- 发现和全部图集从当前源站加载列表；搜索框搜索当前来源，也支持粘贴完整图集链接。
+- “发现”复用当前来源的 Popular 热门页，默认保留源站热度顺序，最多展示 50 本；“全部图集”浏览源站最新列表。首页热门支持全局分类，搜索词仍进入正常源站搜索，也支持粘贴完整图集链接。
+- 源站热门依据最近一分钟访问热度，从过去 24 小时发布的图集中排列，属于全站热门而非个性化推荐（[源站说明](https://ehwiki.org/wiki/Galleries#Popular)）。热门页不自动轮询，点击刷新获取当前结果，保持返回时的浏览状态。
 - 在“阅读偏好 → 全局筛选分类”中多选 E-Hentai 的 10 个顶级分类，点击“应用分类”后对发现、搜索、收藏和足迹生效；默认选择全部分类。
 - 点击图集详情或列表上方的标签，以该标签向源站精确搜索相关图集，保留全局分类设置。
 - “加载更多”沿用源站游标继续请求，保留搜索词和分类。
@@ -42,7 +43,7 @@ node scripts/serve.mjs dist
 
 | 路径 | 用途 |
 | --- | --- |
-| `GET /api/galleries?q=关键词&next=游标&f_cats=排除分类掩码` | 解析源站搜索页，返回图集 ID、token 和下一页游标 |
+| `GET /api/galleries?q=关键词&next=游标&f_cats=排除分类掩码&feed=popular` | 读取热门或搜索列表，返回图集 ID、token 和下一页游标（热门无分页） |
 | `GET /api/pages?gid=ID&token=TOKEN&p=缩略图分页` | 按需读取源站小图或拼图裁剪信息，避免下载整本原图 |
 | `GET /api/image?gid=ID&token=TOKEN&page=页码` | 解析图片页，以 302 跳转到原始图片 |
 | `GET/POST/DELETE /api/ex-session` | 检查、验证或清除 ExHentai 会话 |
