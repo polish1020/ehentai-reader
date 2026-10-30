@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 await rm(new URL('../dist/',import.meta.url),{recursive:true,force:true});
 await cp(new URL('../public/',import.meta.url),new URL('../dist/',import.meta.url),{recursive:true});
 const hasher=createHash('sha256');
-for (const file of ['index.html','style.css','app.js','source.mjs','filters.mjs','manifest.webmanifest','sw.js']) hasher.update(await readFile(new URL(`../public/${file}`,import.meta.url)));
+for (const file of ['index.html','style.css','app.js','source.mjs','filters.mjs','navigation.mjs','image-cache.mjs','manifest.webmanifest','sw.js']) hasher.update(await readFile(new URL(`../public/${file}`,import.meta.url)));
 const version=hasher.digest('hex').slice(0,12);
 const sw=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
 await writeFile(new URL('../dist/sw.js',import.meta.url),sw.replace('yijing-live-v1',`yijing-live-${version}`));
