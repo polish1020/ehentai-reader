@@ -14,6 +14,8 @@ const paths={
   image:'M3 3h18v18H3zM3 16l5-5 5 5 3-3 5 5M8 7h.01',
   download:'M12 3v12M7 10l5 5 5-5M4 16v5h16v-5',
   star:'M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3z',
+  'thumb-up':'M7 10v11H3V10h4zM7 10l4-7h2v5h5a3 3 0 012.9 3.8l-2 7A3 3 0 0116 21H7',
+  'thumb-down':'M7 14V3H3v11h4zM7 14l4 7h2v-5h5a3 3 0 002.9-3.8l-2-7A3 3 0 0016 3H7',
   tag:'M3 3h8l10 10-8 8L3 11V3zM7 7h.01',
   up:'M6 14l6-6 6 6',down:'M6 10l6 6 6-6',
   settings:'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'

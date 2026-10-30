@@ -17,15 +17,13 @@ export class SourceFeatures {
       event.preventDefault();this.submit(form,event.submitter).catch(error=>this.error(error));
     });
     document.addEventListener('change',event=>{
-      if(event.target.matches('[data-feature-select="favorite-group"]'))this.onFavoriteMode('source',event.target.value);
       if(event.target.matches('[data-feature-select="tag-set"]'))this.openTags(Number(event.target.value)).catch(error=>this.error(error));
     });
   }
   controls(list) {
     const advanced=list.filters||{};
     const tabs=list.view==='discover'?`<nav class="feed-tabs" aria-label="发现内容"><div role="tablist">${feeds.map(([id,label])=>`<button role="tab" aria-selected="${feedFor(list)===id}" data-feature="feed" data-feed="${id}">${label}</button>`).join('')}</div></nav>`:'';
-    const favorites=list.view==='favorites'?`<div class="favorite-modes">${button('local-favorites','本机收藏',`aria-pressed="${list.favoriteMode!=='source'}"`)}${button('source-favorites','源站收藏',`aria-pressed="${list.favoriteMode==='source'}"`)}${list.favoriteMode==='source'?`<label class="favorite-group-label">分组<select data-feature-select="favorite-group"><option value="">全部分组</option>${Array.from({length:10},(_,id)=>`<option value="${id}" ${String(advanced.favcat)===String(id)?'selected':''}>${esc(this.groups.find(group=>group.id===id)?.name||`收藏分组 ${id+1}`)}</option>`).join('')}</select></label>`:''}</div>`:'';
-    return tabs+favorites;
+    return tabs;
   }
   tools(list,content,categoryFiltered=false) {
     const advanced=list.filters||{};
@@ -35,7 +33,7 @@ export class SourceFeatures {
   mountGallery(gallery,root) {
     this.gallery=gallery;
     const tools=document.createElement('div');tools.className='gallery-tools';
-    tools.innerHTML=button('community',`${icon('star')}评分与评论`)+button('gallery-favorite',`${icon('heart')}源站收藏`)+button('downloads',`${icon('download')}下载`)+button('gallery-tags',`${icon('tag')}标签操作`);
+    tools.innerHTML=button('community',`${icon('star')}评分与评论`)+button('gallery-favorite',`${icon('heart')}收藏设置`)+button('downloads',`${icon('download')}下载`)+button('gallery-tags',`${icon('tag')}标签操作`);
     root.querySelector('.gallery-summary')?.after(tools);
   }
   modal(title,body) {
@@ -62,12 +60,6 @@ export class SourceFeatures {
         if(!this.tagSynced){const result=await this.get('tags',null);if(intent!==this.sequence)return;this.tags=result;this.onPreferences(result.tags);this.tagSynced=true;}
       }
       return this.onFeed(target.dataset.feed);
-    }
-    if(action==='local-favorites')return this.onFavoriteMode('local');
-    if(action==='source-favorites'){
-      const intent=++this.sequence;await this.account();if(intent!==this.sequence)return;
-      const result=await this.get('favorite-groups',null);if(intent!==this.sequence)return;
-      this.groups=result.groups;return this.onFavoriteMode('source');
     }
     if(action==='advanced')return this.openAdvanced();
     if(action==='advanced-clear'){const form=target.closest('form');for(const input of form.querySelectorAll('input,select')){if(input.name==='query')continue;if(input.type==='checkbox')input.checked=false;else input.value='';}return;}
@@ -118,12 +110,21 @@ export class SourceFeatures {
   async openCommunity() {
     const gallery=this.gallery,sequence=this.modal('评分与评论','<p class="loading">正在读取源站评论…</p>');
     const info=await this.get('details',gallery);if(sequence!==this.sequence)return;
-    this.modal('评分与评论',`<p>${esc(info.rating || gallery.rating+' 星')} · ${info.ratingCount} 人评分</p><form data-feature-form="rating" class="feature-form"><label class="feature-field">我的评分<select name="rating">${Array.from({length:10},(_,i)=>(i+1)/2).map(value=>`<option value="${value}" ${value===5?'selected':''}>${value} 星</option>`).join('')}</select></label><button type="submit" class="primary-button">提交源站评分</button></form><div class="source-comments">${info.comments.map(comment=>`<article><header><b>${esc(comment.author||'源站用户')}</b><small>${esc(comment.posted)}</small></header><p>${esc(comment.text)}</p>${comment.id>0?`<div class="comment-actions">${button('comment-vote',icon('up'),`data-id="${comment.id}" data-vote="1" aria-label="赞同评论"`)}<span class="comment-score">${esc(comment.score)}</span>${button('comment-vote',icon('down'),`data-id="${comment.id}" data-vote="-1" aria-label="反对评论"`)}</div>`:''}</article>`).join('')||'<p class="feature-note">暂无评论。</p>'}</div><form data-feature-form="comment" class="feature-form"><label class="feature-field">发表源站评论<textarea name="text" required maxlength="20000" rows="4"></textarea></label><button type="submit" class="primary-button">发布评论</button></form>`);
+    this.modal('评分与评论',`<p>${esc(info.rating || gallery.rating+' 星')} · ${info.ratingCount} 人评分</p><form data-feature-form="rating" class="feature-form"><label class="feature-field">我的评分<select name="rating">${Array.from({length:10},(_,i)=>(i+1)/2).map(value=>`<option value="${value}" ${value===5?'selected':''}>${value} 星</option>`).join('')}</select></label><button type="submit" class="primary-button">提交源站评分</button></form><div class="source-comments">${info.comments.map(comment=>`<article><header><b>${esc(comment.author||'源站用户')}</b><small>${esc(comment.posted)}</small></header><p>${esc(comment.text)}</p>${comment.id>0?`<div class="comment-actions"><button type="button" class="comment-vote" data-feature="comment-vote" data-id="${comment.id}" data-vote="1" aria-label="赞同评论">${icon('thumb-up')}</button><span class="comment-score">${esc(comment.score)}</span><button type="button" class="comment-vote" data-feature="comment-vote" data-id="${comment.id}" data-vote="-1" aria-label="反对评论">${icon('thumb-down')}</button></div>`:''}</article>`).join('')||'<p class="feature-note">暂无评论。</p>'}</div><form data-feature-form="comment" class="feature-form"><label class="feature-field">发表源站评论<textarea name="text" required maxlength="20000" rows="4"></textarea></label><button type="submit" class="primary-button">发布评论</button></form>`);
   }
   async openFavorite() {
-    const intent=++this.sequence;await this.account();if(intent!==this.sequence)return;const sequence=this.modal('源站收藏','<p class="loading">正在读取收藏分组…</p>');
-    const result=await this.get('favorite-info',this.gallery);if(sequence!==this.sequence)return;this.groups=result.groups;
-    this.modal('源站收藏',`<p class="feature-note">保存到当前源站账号，可在源站同步查看；本机收藏仍保留在原来的爱心按钮中。</p><form data-feature-form="favorite" class="feature-form"><label class="feature-field">收藏分组<select name="group">${result.groups.map(group=>`<option value="${group.id}" ${group.id===result.group?'selected':''}>${esc(group.name)}</option>`).join('')}</select></label><label class="feature-field">备注（最多 200 字节）<textarea name="note" rows="3">${esc(result.note)}</textarea></label><div class="source-actions"><button type="submit" class="primary-button">保存到源站</button><button type="submit" name="remove" value="true" class="outline-button">移除源站收藏</button></div></form>`);
+    const gallery=this.gallery,sequence=this.modal('收藏设置','<p class="loading">正在读取收藏信息…</p>');
+    const groups=Array.from({length:10},(_,id)=>({id,name:`收藏分组 ${id+1}`}));
+    let result={groups,...this.favoriteInfo(gallery)},message='优先同步到源站；没有凭证或同步失败时保存在本地。';
+    try {
+      if(await this.ensureAccount()){
+        const scope=this.getScope();result=await this.get('favorite-info',gallery);
+        if(scope!==this.getScope())return;
+        this.onFavoriteKnown(gallery,result,scope);
+      }
+    }catch{message='暂时无法读取源站分组，仍可保存到本地，稍后再同步。';}
+    if(sequence!==this.sequence||!this.dialog.open)return;
+    this.modal('收藏设置',`<p class="feature-note">${message}</p><form data-feature-form="favorite" class="feature-form"><label class="feature-field">源站收藏分组<select name="group">${result.groups.map(group=>`<option value="${group.id}" ${group.id===(result.group??0)?'selected':''}>${esc(group.name)}</option>`).join('')}</select></label><label class="feature-field">备注（最多 200 字节）<textarea name="note" rows="3">${esc(result.note)}</textarea></label><div class="source-actions"><button type="submit" class="primary-button">保存收藏</button><button type="submit" name="remove" value="true" class="outline-button">取消收藏</button></div></form>`);
   }
   openGalleryTags() {
     this.modal('图集标签',`<form data-feature-form="tag-vote" class="feature-form"><label class="feature-field">选择标签<select name="tag">${this.gallery.tags.map(tag=>`<option>${esc(tag)}</option>`).join('')}</select></label><div class="source-actions"><button type="submit" name="vote" value="1" class="primary-button">赞同标签</button><button type="submit" name="vote" value="-1" class="outline-button">反对标签</button></div></form><p class="feature-note">标签投票会提交到源站。关注和屏蔽可在标签偏好中管理。</p>${button('tags','管理关注与屏蔽')}`);
@@ -165,13 +166,13 @@ export class SourceFeatures {
         }
         if(!valid())return;this.dialog.close();return this.onSearch('',{f_shash:hash,...imageFilters},'library');
       }
+      if(kind==='favorite'){const result=await this.onFavoriteSave(this.gallery,{remove:data.remove==='true',group:Number(data.group),note:data.note});if(valid())this.status(this.favoriteMessage(result));return;}
       await this.account();if(!valid())return;
       const scope=this.getScope();
       if(kind==='tag') {
         await this.post('tag-preference',{...data,set:this.tagSet,watch:form.elements.watch.checked,hidden:form.elements.hidden.checked},null);
         if(!valid()||scope!==this.getScope())return;await this.openTags(this.tagSet);this.status('标签偏好已保存到源站');return;
       }
-      if(kind==='favorite'){await this.post('favorite',{...data,remove:data.remove==='true'});if(!valid()||scope!==this.getScope())return;this.onFavoriteSaved(this.gallery,{remove:data.remove==='true',group:Number(data.group)});this.status(data.remove?'已移除源站收藏':'已保存到源站收藏');return;}
       await this.post(kind,data);if(!valid()||scope!==this.getScope())return;
       if(kind==='comment'){await this.openCommunity();this.status('评论已发布到源站');}
       else this.status(kind==='rating'?'评分已保存到源站':'标签投票已保存到源站');

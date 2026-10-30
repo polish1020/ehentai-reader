@@ -81,3 +81,9 @@ test('source-specific lists stay isolated and clearing ExHentai removes its snap
   assert.equal(store.tab('library','exhentai'),undefined);
   assert.equal(store.tab('library'),publicList);
 });
+
+test('legacy favorite modes merge into a fresh account-authoritative collection without dropping local snapshots',()=>{
+ const legacy={version:1,tabs:{'e-hentai:favorites':'old-favorites'},lists:[{key:'old-favorites',view:'favorites',source:'e-hentai',query:'',favoriteMode:'source',filters:{favcat:2},galleries:[{id:'1/abcdef',source:'e-hentai'}],initialized:true,isLoading:false}]};
+ const store=new ListStore({getItem:()=>JSON.stringify(legacy),setItem:()=>{}}),list=store.tab('favorites','e-hentai');
+ assert.equal(list.favoriteMode,undefined);assert.deepEqual(list.filters,{});assert.equal(list.initialized,false);assert.equal(list.galleries.length,1);
+});

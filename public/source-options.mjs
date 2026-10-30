@@ -1,6 +1,6 @@
 import {tagQuery} from './filters.mjs';
 export const feeds=[['popular','实时热门'],['yesterday','昨日榜'],['month','月榜'],['year','年榜'],['all','总榜'],['watched','关注']];
-export const feedFor=list=>list.view==='search'?(list.searchFeed||'latest'):list.view==='favorites' && list.favoriteMode==='source'?'favorites':list.view==='discover'?(list.feed||'popular'):'latest';
+export const feedFor=list=>list.view==='search'?(list.searchScope==='favorites'?'favorites':list.searchFeed||'latest'):list.view==='favorites'?'favorites':list.view==='discover'?(list.feed||'popular'):'latest';
 export function searchOptions(query='',filters={}) {
   const parts=[query.trim()];
   for (const name of ['artist','language','uploader']) {

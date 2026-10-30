@@ -22,13 +22,15 @@ export class ListStore {
           if (list.source==='exhentai' && ['yesterday','month','year','all'].includes(list.feed) && /ExHentai.*404/.test(list.listError||'')) {
             list.initialized=false;list.isLoading=false;list.listError='';
           }
+          if((list.view==='favorites'||list.view==='search'&&list.searchScope==='favorites')&&!list.favoritesVersion){delete list.favoriteMode;delete list.filters?.favcat;Object.assign(list,{favoritesVersion:1,initialized:false,isLoading:false,nextCursor:null,listError:''});}
+          if(list.view==='favorites'||list.view==='search'&&list.searchScope==='favorites')list.initialized=false;
           this.lists.set(list.key,list);
         }
       }
     } catch { /* Browsing continues when session storage is unavailable. */ }
   }
   create(view='discover',query='',source='e-hentai') {
-    const list={key:crypto.randomUUID(),view,query,source,feed:view==='discover'?'popular':'latest',filters:{},favoriteMode:'local',sort:view === 'discover' ? 'source' : 'newest',discoveryVersion:2,discoveryContinuation:false,discoveryLatest:false,popularIds:[],listMode:false,galleries:[],nextCursor:null,isLoading:false,listError:'',scrollY:0,initialized:false,categoryKey:null,pendingAppend:false};
+    const list={key:crypto.randomUUID(),view,query,source,feed:view==='discover'?'popular':'latest',filters:{},favoritesVersion:1,sort:view === 'discover' ? 'source' : 'newest',discoveryVersion:2,discoveryContinuation:false,discoveryLatest:false,popularIds:[],listMode:false,galleries:[],nextCursor:null,isLoading:false,listError:'',scrollY:0,initialized:false,categoryKey:null,pendingAppend:false};
     this.lists.set(list.key,list);
     return list;
   }

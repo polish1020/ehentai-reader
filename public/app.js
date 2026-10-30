@@ -5,6 +5,7 @@ import {ReaderPreloader,preloadNeighbors} from './reader-preload.mjs';
 import {ThumbnailStore,ThumbnailView} from './photo-thumbnails.mjs';
 import {PhotoViewer} from './photo-viewer.mjs';
 import {discoveryPage} from './discovery.mjs';
+import {Favorites,favoriteMatches} from './favorites.mjs';
 import {InfiniteList} from './list-loader.mjs';
 import {SourceFeatures} from './source-features.mjs';
 import {feeds,feedFor,searchOptions,accepts,quickTags} from './source-options.mjs';
@@ -37,7 +38,8 @@ const popularFeed = target => target.view === 'discover' && feedFor(target)==='p
 const rankingFeed = target => target.view==='discover' && ['yesterday','month','year','all'].includes(feedFor(target)) && !searchOptions(target.query,target.filters).query && !target.filters?.f_shash;
 const accountList = target => feedFor(target)==='watched' || feedFor(target)==='favorites';
 const collectionView = target => target.view==='search' ? target.searchScope || 'search' : target.view;
-const localCollection = target => collectionView(target)==='history' || collectionView(target)==='favorites' && target.favoriteMode!=='source';
+const favoriteCollection=target=>collectionView(target)==='favorites';
+const localCollection = target => collectionView(target)==='history';
 const searchReady = target => !!searchOptions(target.query,target.filters).query || Object.entries(target.filters||{}).some(([key,value])=>key!=='favcat'&&!!value);
 const knownGalleries = new Map(), thumbnailStores = new Map();
 let detailThumbnails, photoRequest = 0;
@@ -75,12 +77,31 @@ function theme() {
 theme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
 function route() { return list?.view || 'discover'; }
-function favorite(id) {
-  state.favorites = state.favorites.includes(id) ? state.favorites.filter(value => value !== id) : [...state.favorites, id]; save();
-  document.querySelectorAll(`[data-favorite="${CSS.escape(id)}"]`).forEach(button => { button.innerHTML = icon('heart')+(button.classList.contains('favorite-button')?'':`<span>${state.favorites.includes(id)?'已收藏':'收藏图集'}</span>`); button.setAttribute('aria-pressed', String(state.favorites.includes(id))); });
-  if (activeGallery?.id === id) updateReaderFavorite();
-  if (entry?.screen === 'list') { renderResults(); remember(); }
+function updateFavorites() {
+  for(const target of lists.lists.values())if(favoriteCollection(target)&&target.authScope===exSession.scope){
+    target.galleries=[...new Map([...target.galleries,...favorites.galleries(target.source)].map(gallery=>[gallery.id,gallery])).values()].filter(gallery=>favorites.has(gallery.id));
+    target.remoteFavoriteIds=target.galleries.filter(gallery=>favorites.remote(gallery.id)).map(gallery=>gallery.id);
+  }
+  for(const button of document.querySelectorAll('[data-favorite]')){
+    const id=button.dataset.favorite,selected=favorites.has(id);
+    button.setAttribute('aria-pressed',String(selected));button.disabled=favorites.busy(id);
+    button.innerHTML=icon('heart')+(button.classList.contains('favorite-button')?'':`<span>${selected?'已收藏':'收藏图集'}</span>`);
+  }
+  if(activeGallery)updateReaderFavorite();
+  if(entry?.screen==='list'){renderResults();remember();}
 }
+function favoriteResult(result) {
+  return result.remoteSaved?`源站收藏已存在，但更新失败：${result.error}`:result.synced?result.remove?'已取消源站收藏':'已收藏并同步到源站':result.remove?`已从本地移除；源站取消失败：${result.error}`:`源站收藏失败，已保存在本地：${result.error}`;
+}
+async function saveFavorite(gallery,change={}) {
+  const result=await favorites.set(gallery,change);toast(favoriteResult(result));return result;
+}
+function favorite(id) {
+  const gallery=knownGalleries.get(id)||favorites.meta(id).gallery||activeGallery?.id===id&&activeGallery;
+  if(!gallery)return toast('图集信息尚未加载，请稍后重试');
+  return saveFavorite(gallery,{remove:favorites.has(id)});
+}
+
 function progressFor(gallery) {
   const p = state.progress[gallery.id];
   return p && Number.isInteger(p.page) ? Math.max(0, Math.min(pageCount(gallery) - 1, p.page)) : 0;
@@ -92,17 +113,19 @@ function nav() {
 }
 function card(g) {
   const p = state.progress[g.id], percent = p ? Math.round((progressFor(g) + 1) / pageCount(g) * 100) : 0;
-  return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${pageCount(g)} P</span></div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div><div class="card-tags">${g.tags.slice(0,3).map(tag => `<span ${tagAttributes(tag)}>${escape(tag)}</span>`).join('')}</div>${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button><button class="favorite-button" data-favorite="${escape(g.id)}" aria-label="收藏 ${escape(g.title)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥' : '♡'}</button></article>`;
+  return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${pageCount(g)} P</span></div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div><div class="card-tags">${g.tags.slice(0,3).map(tag => `<span ${tagAttributes(tag)}>${escape(tag)}</span>`).join('')}</div>${favoriteCollection(list)&&favorites.localOnly(g.id)?'<span class="favorite-local-label">仅本地</span>':''}${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button><button class="favorite-button" data-favorite="${escape(g.id)}" aria-label="收藏 ${escape(g.title)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥' : '♡'}</button>${favoriteCollection(list)&&favorites.localOnly(g.id)?`<button class="favorite-sync" data-sync-favorite="${escape(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.busy(g.id)?'正在同步…':'同步到源站'}</button>`:''}</article>`;
 }
 function filtered() {
   if(list.view==='search'&&!searchReady(list))return [];
+  if(favoriteCollection(list))list.galleries=[...new Map([...list.galleries,...favorites.galleries(list.source)].map(gallery=>[gallery.id,gallery])).values()].filter(gallery=>favorites.has(gallery.id));
   if (localCollection(list)) {
     const ids = collectionView(list) === 'favorites' ? state.favorites : Object.keys(state.progress);
     const known = ids.map(id => knownGalleries.get(id)).filter(g => g?.source === list.source);
     list.galleries = [...new Map([...list.galleries,...known].map(g => [g.id,g])).values()];
   }
-  let items = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category) && accepts(g,list.filters,state.tagPreferences) && (collectionView(list) !== 'favorites' || list.favoriteMode==='source' || state.favorites.includes(g.id)) && (collectionView(list) !== 'history' || state.progress[g.id]));
+  let items = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category) && accepts(g,list.filters,state.tagPreferences) && (!favoriteCollection(list)||favorites.has(g.id)) && (collectionView(list) !== 'history' || state.progress[g.id]));
   const q = list.query.trim().toLowerCase();
+  if(q&&favoriteCollection(list))items=items.filter(gallery=>favoriteMatches(gallery,list.query));
   if (q && localCollection(list)) items = items.filter(g => [g.title,g.creator,...g.tags].join(' ').toLowerCase().includes(q));
   return items.sort((a,b) => collectionView(list) === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : list.sort === 'source' ? 0 : list.sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : list.sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
 }
@@ -140,6 +163,8 @@ function renderResults() {
   const refresh=$('[data-action=refresh-list]');
   refresh.disabled=list.isLoading;refresh.setAttribute('aria-busy',String(list.isLoading));
   $('#result-heading h1').hidden = route()==='search' && !searchReady(list);
+  $('#favorite-notice').textContent=favoriteCollection(list)?list.favoriteNotice||'':'';
+  $('#favorite-notice').hidden=!$('#favorite-notice').textContent;
   $('#gallery-grid').className = `grid ${list.listMode ? 'list-mode' : ''}`;
   const emptyMessages = {favorites:['还没有收藏','点击图集右上角的爱心，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
   const [title, message] = route()==='search' && !searchReady(list) ? ['搜索图集','输入关键词，或在筛选中使用高级搜索与以图搜图。'] : !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : rankingFeed(list) && list.nextCursor ? ['本页暂无符合筛选的图集','可继续加载后面的排名，或调整全局分类和筛选条件。'] : list.query || route()==='search' && searchReady(list) || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[collectionView(list)] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
@@ -157,11 +182,37 @@ function renderQuickTags() {
 function render() {
   nav();const view=route(),searchPage=view==='search';
   document.body.classList.toggle('searching',searchPage);
-  const placeholder=localCollection(list)?collectionView(list)==='favorites'?'搜索本机收藏':'搜索阅读足迹':feedFor(list)==='favorites'?'搜索源站收藏':`搜索 ${sourceName(list.source)} 图集`;
+  const placeholder=favoriteCollection(list)?'搜索收藏':localCollection(list)?'搜索阅读足迹':`搜索 ${sourceName(list.source)} 图集`;
   const heading=searchPage?`<header class="search-page-header"><button class="icon-button" data-action="search-back" aria-label="返回上一页">${icon('back')}</button><form id="search-page-form"><label class="search"><span aria-hidden="true">${icon('search')}</span><input id="search" type="search" enterkeyhint="search" placeholder="${placeholder}" value="${escape(list.query)}" aria-label="搜索图集" autocomplete="off"></label><button class="primary-button search-submit" type="submit">搜索</button></form></header>`:'';
   const options=`<div class="list-tool-row"><span>全局分类</span><button class="category-button" data-action="settings" aria-label="设置全局分类">${state.categories.length===categories.length?'全部分类':`已选 ${state.categories.length} 类`} ${icon('next')}</button></div><label class="list-tool-row">排序<select id="sort" aria-label="图集排序">${view==='discover'||searchPage||feedFor(list)==='favorites'?'<option value="source">源站顺序</option>':''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select></label><div class="list-tool-row"><span>显示方式</span><div class="list-tool-buttons"><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${icon(list.listMode?'grid':'list')}</button></div></div>`;
-  $('#main').innerHTML=`${heading}${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h1><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h1><div class="list-heading-actions"><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">${icon('refresh')}</button>${features.tools(list,options,state.categories.length!==categories.length)}</div></div><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
+  $('#main').innerHTML=`${heading}${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h1><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h1><div class="list-heading-actions"><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">${icon('refresh')}</button>${features.tools(list,options,state.categories.length!==categories.length)}</div></div><p id="favorite-notice" class="feature-note" role="status" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏优先同步到源站，失败时保存在本地；阅读进度与设置保存在当前设备。</div>`;
   $('#sort').value=list.sort;renderQuickTags();renderResults();decorateIcons();
+}
+async function loadFavorites(target,{append,request,search,options,selected,cursor}) {
+  const source=target.source,current=()=>request===target.requestId;
+  target.favoriteNotice='';
+  const ids=state.favorites.filter(id=>galleryReference(id).source===source);
+  const missing=[];
+  for(const id of ids){const known=knownGalleries.get(id);if(known)favorites.remember(known);if(!favorites.meta(id).gallery){const ref=galleryReference(id);missing.push([Number(ref.gid),ref.token]);}}
+  const [local,auth]=await Promise.allSettled([metadata(missing,source),refreshExSession()]);
+  if(!current())throw new DOMException('Navigation changed','AbortError');
+  if(local.status==='fulfilled')for(const gallery of local.value){knownGalleries.set(gallery.id,gallery);favorites.remember(gallery);}
+  target.authScope=exSession.scope;
+  if(!exSession.configured||auth.status==='rejected'){
+    target.favoriteNotice=auth.status==='rejected'?'暂时无法连接源站，当前展示本地收藏。':'未登录源站，当前展示本地收藏。';
+    return {galleries:favorites.galleries(source),next:null};
+  }
+  const scope=exSession.scope;
+  try {
+    const data=await requestJSON('/api/galleries?'+new URLSearchParams({feed:'favorites',q:search,next:cursor||'',source,...options.params,f_cats:String(excludedCategories(selected))}));
+    if(!current()||scope!==exSession.scope)throw new DOMException('Account changed','AbortError');
+    const remote=await metadata(data.ids,source);
+    if(!current()||scope!==exSession.scope)throw new DOMException('Account changed','AbortError');
+    if(!append&&!search&&!Object.keys(target.filters||{}).length)favorites.resetRemote(source);
+    favorites.ingest(remote,scope);
+    target.remoteFavoriteIds=[...new Set([...(append?target.remoteFavoriteIds||[]:[]),...remote.map(gallery=>gallery.id)])];
+    return {galleries:favorites.galleries(source),next:data.next};
+  }catch(error){target.favoriteNotice='源站收藏暂时无法读取，已保留本地收藏和当前账号的缓存。';throw error;}
 }
 async function loadGalleries(append=false,target=list) {
   if (renderTimer && debounceTarget === target) { clearTimeout(renderTimer); renderTimer = null; debounceTarget = null; }
@@ -180,7 +231,9 @@ async function loadGalleries(append=false,target=list) {
   target.pendingRequest = (async () => {
     try {
       let data;
-      if (localCollection(target)) {
+      if(favoriteCollection(target)){
+        data=await loadFavorites(target,{append,request,search,options,selected,cursor});
+      } else if (localCollection(target)) {
         const ids = (collectionView(target) === 'favorites' ? state.favorites : Object.keys(state.progress)).filter(id => id.includes('/') && galleryReference(id).source === source);
         data = {galleries:await metadata(ids.map(id => { const {gid,token} = galleryReference(id); return [Number(gid),token]; }),source),next:null};
       } else {
@@ -202,7 +255,7 @@ async function loadGalleries(append=false,target=list) {
         }
       }
       if (request !== target.requestId) return;
-      data.galleries.forEach(g => knownGalleries.set(g.id,g));
+      data.galleries.forEach(g => {knownGalleries.set(g.id,g);favorites.remember(g);});
       target.galleries = append ? [...new Map([...target.galleries,...data.galleries].map(g => [g.id,g])).values()] : data.galleries;
       target.nextCursor = append && data.next===cursor ? null : data.next;
       if (discovery) {
@@ -286,7 +339,7 @@ async function renderDetail(id) {
   if (g.source === 'exhentai') await sendImageContext();
   if (request !== detailRequest || entry.screen !== 'detail' || entry.galleryId !== id) return;
   detailThumbnails?.close();
-  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><span>${pageCount(g)} 张照片</span></div><div class="gallery-summary"><div class="gallery-summary-copy"><span class="eyebrow">${escape(sourceName(g.source))} / ${escape(g.category)}</span><h2>${escape(g.title)}</h2><div class="gallery-facts"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><details class="gallery-tags photo-tag-panel" ${entry.tagsOpen ? 'open' : ''}><summary>标签 · ${g.tags.length}<span>按标签查找相关图集</span></summary><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></details><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
+  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><span>${pageCount(g)} 张照片</span></div><div class="gallery-summary"><div class="gallery-summary-copy"><span class="eyebrow">${escape(sourceName(g.source))} / ${escape(g.category)}</span><h2>${escape(g.title)}</h2><div class="gallery-facts"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><details class="gallery-tags photo-tag-panel" ${entry.tagsOpen ? 'open' : ''}><summary>标签 · ${g.tags.length}<span>按标签查找相关图集</span></summary><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></details><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
   detailThumbnails = new ThumbnailView($('#detail-body').querySelector('.photo-album-grid'),$('#detail-dialog'),thumbnailStore(g));
   features.mountGallery(g,$('#detail-body'));decorateIcons($('#detail-body'));
@@ -306,7 +359,7 @@ function updateCounter() {
   $('#page-slider').value = String(currentPage + 1); $('#page-counter').textContent = `${currentPage + 1} / ${activeGallery.pages.length}`;
   $('[data-action=prev]').disabled = currentPage === 0; $('[data-action=next]').disabled = currentPage === activeGallery.pages.length - 1;
 }
-function updateReaderFavorite() { const b = $('#reader-favorite'); b.innerHTML = icon('heart'); b.setAttribute('aria-pressed', String(state.favorites.includes(activeGallery.id))); }
+function updateReaderFavorite() { const b = $('#reader-favorite'); b.innerHTML = icon('heart'); b.setAttribute('aria-pressed', String(favorites.has(activeGallery.id)));b.disabled=favorites.busy(activeGallery.id); }
 function readerImage(page,index) {
   const dimensions = readerPreloader?.loaded.get(index) || page;
   return `<div class="reader-page" data-index="${index}" style="aspect-ratio:${dimensions.width || 600}/${dimensions.height || 800}"><span class="reader-placeholder" aria-hidden="true">第 ${index+1} 页</span><img data-src="${escape(page.src)}" alt="${escape(page.alt || `${activeGallery.title} · 第 ${index+1} 页`)}" data-page="${index}" decoding="async" draggable="false" width="${dimensions.width || 600}" height="${dimensions.height || 800}"></div>`;
@@ -437,7 +490,7 @@ function remember() {
   if (!list || !entry) return;
   if (!restoringScroll && !document.body.classList.contains('reading')) list.scrollY = window.scrollY;
   if ($('#detail-dialog').open) { entry.detailScroll = $('#detail-dialog').scrollTop;entry.tagsOpen = !!$('#detail-dialog').querySelector('.photo-tag-panel')?.open; }
-  history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source,feed:list.feed,filters:list.filters,favoriteMode:list.favoriteMode,searchOrigin:list.searchOrigin,searchScope:list.searchScope,searchFeed:list.searchFeed}},'');
+  history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source,feed:list.feed,filters:list.filters,searchOrigin:list.searchOrigin,searchScope:list.searchScope,searchFeed:list.searchFeed}},'');
   lists.save();
 }
 function restoreScroll() {
@@ -449,7 +502,7 @@ function restoreScroll() {
   });
 }
 function makeEntry(screen,target,galleryId=null,parent=false,photoIndex=0) {
-  return {yijingNav:1,key:crypto.randomUUID(),listKey:target.key,view:target.view,source:target.source,screen,galleryId,parent,photoIndex,fallback:{view:target.view,query:target.query,sort:target.sort,listMode:target.listMode,source:target.source,feed:target.feed,filters:target.filters,favoriteMode:target.favoriteMode,searchOrigin:target.searchOrigin,searchScope:target.searchScope,searchFeed:target.searchFeed}};
+  return {yijingNav:1,key:crypto.randomUUID(),listKey:target.key,view:target.view,source:target.source,screen,galleryId,parent,photoIndex,fallback:{view:target.view,query:target.query,sort:target.sort,listMode:target.listMode,source:target.source,feed:target.feed,filters:target.filters,searchOrigin:target.searchOrigin,searchScope:target.searchScope,searchFeed:target.searchFeed}};
 }
 function entryHash(value) {
   if (['photo','photo-full'].includes(value.screen)) return `#${value.screen}/${value.galleryId}/${(value.photoIndex || 0)+1}`;
@@ -475,7 +528,7 @@ function applyNavigation() {
   const legacy=lists.lists.get(next.listKey);
   if(next.screen==='list' && legacy && legacy.view!=='search' && searchReady(legacy)){
     const origin=legacy.view,feed=feedFor(legacy),root=lists.create(origin,'',legacy.source);
-    Object.assign(root,{feed:legacy.feed,favoriteMode:legacy.favoriteMode,filters:legacy.filters?.favcat===undefined?{}:{favcat:legacy.filters.favcat}});
+    Object.assign(root,{feed:legacy.feed,filters:legacy.filters?.favcat===undefined?{}:{favcat:legacy.filters.favcat}});
     Object.assign(legacy,{view:'search',searchOrigin:origin,searchScope:origin,searchFeed:['watched','favorites'].includes(feed)?feed:'latest'});
     lists.activate(root);lists.activate(legacy);lists.save();
     const parent=makeEntry('list',root);history.replaceState(parent,'',entryHash(parent));
@@ -493,7 +546,7 @@ function applyNavigation() {
   list = lists.lists.get(next.listKey);
   if (!list) {
     list = lists.create(next.fallback?.view || next.view,next.fallback?.query || '',next.source || next.fallback?.source || 'e-hentai');
-    Object.assign(list,{sort:next.fallback?.sort || list.sort,listMode:!!next.fallback?.listMode,feed:next.fallback?.feed || list.feed,filters:next.fallback?.filters || {},favoriteMode:next.fallback?.favoriteMode || 'local',searchOrigin:next.fallback?.searchOrigin,searchScope:next.fallback?.searchScope,searchFeed:next.fallback?.searchFeed});
+    Object.assign(list,{sort:next.fallback?.sort || list.sort,listMode:!!next.fallback?.listMode,feed:next.fallback?.feed || list.feed,filters:next.fallback?.filters || {},searchOrigin:next.fallback?.searchOrigin,searchScope:next.fallback?.searchScope,searchFeed:next.fallback?.searchFeed});
     entry.listKey = list.key; history.replaceState(entry,'');
   }
   if (list.source === 'exhentai' && !exSession.configured) {
@@ -502,7 +555,8 @@ function applyNavigation() {
   lists.activate(list);
   features.cancel();
   sendImageContext();
-  list.galleries.forEach(g => knownGalleries.set(g.id,g));
+  if(favoriteCollection(list)&&list.authScope===exSession.scope&&exSession.scope)favorites.ingest(list.galleries.filter(gallery=>list.remoteFavoriteIds?.includes(gallery.id)),exSession.scope);
+  list.galleries.forEach(g => {knownGalleries.set(g.id,g);favorites.remember(g);});
   ++detailRequest;detailThumbnails?.close();detailThumbnails = null;
   if (!['photo','photo-full'].includes(entry.screen) && !$('#photo-viewer').hidden) hidePhotos();
   if (!$('#reader').hidden) hideReader();
@@ -597,7 +651,10 @@ function purgeExLists() {
   features.clearPrivate();
   for (const target of lists.lists.values()) if (target.source === 'exhentai' || accountList(target)) target.requestId = (target.requestId || 0) + 1;
   lists.removeSource('exhentai');
-  for (const [key,target] of lists.lists) if (accountList(target)) lists.lists.delete(key);
+  for (const [key,target] of lists.lists) if(accountList(target)){
+    if(favoriteCollection(target))Object.assign(target,{initialized:false,isLoading:false,authScope:null,remoteFavoriteIds:[],nextCursor:null,listError:'',galleries:target.galleries.filter(gallery=>state.favorites.includes(gallery.id))});
+    else lists.lists.delete(key);
+  }
   for (const key of Object.keys(lists.tabs)) if (!lists.lists.has(lists.tabs[key])) delete lists.tabs[key];
   for (const [key,g] of knownGalleries) if (g.source === 'exhentai') { knownGalleries.delete(key);thumbnailStores.delete(key); }
 }
@@ -617,7 +674,7 @@ async function clearExSession() {
     exSession = {configured:false,scope:null}; setExScope(null); purgeExLists();state.tagPreferences=[];save();
     $('#ex-credentials-form').reset();
     if (state.source === 'exhentai' || list.source === 'exhentai') switchSource('e-hentai');
-    updateSourceSettings(); $('#ex-session-status').textContent = '已清除凭证和对应的私有图片缓存。';
+    updateFavorites();updateSourceSettings(); $('#ex-session-status').textContent = '已清除凭证和对应的私有图片缓存。';
   } catch (error) { $('#ex-session-status').textContent = error.message; }
 }
 async function updateImageCount() {
@@ -638,7 +695,7 @@ $('#ex-credentials-form').addEventListener('submit',async event => {
     purgeExLists(); exSession = checked; setExScope(checked.scope); form.reset(); updateSourceSettings(); sendImageContext();
     await refreshExSession({fillForm:true});
     $('#ex-session-status').textContent = checked.refreshedIgneous ? '验证成功，已自动更新 igneous 并保存到本机。关闭浏览器后仍可使用。' : '验证成功，凭证已保存到本机。关闭浏览器后仍可使用。';
-    if (list.source === 'exhentai' || accountList(list)) {const target=lists.create(route(),list.query,list.source);Object.assign(target,{feed:list.feed,favoriteMode:list.favoriteMode,filters:list.filters});navigate('list',target);}
+    if (list.source === 'exhentai' || accountList(list)) {const target=lists.create(route(),list.query,list.source);Object.assign(target,{feed:list.feed,filters:list.filters});navigate('list',target);}
   } catch (error) { $('#ex-session-status').textContent = error.message; }
   finally { button.disabled = false; }
 });
@@ -678,6 +735,7 @@ document.addEventListener('click', event => {
   if (button.hasAttribute('data-open-photo')) return navigate('photo',list,entry.galleryId,{photoIndex:Number(button.dataset.openPhoto)});
   if (button.dataset.open) return navigate('detail',list,button.dataset.open);
   if (button.dataset.favorite) return favorite(button.dataset.favorite);
+  if(button.dataset.syncFavorite){const gallery=favorites.meta(button.dataset.syncFavorite).gallery;return gallery&&saveFavorite(gallery);}
   if (button.dataset.read) return navigate('reader',list,button.dataset.read);
   if (button.dataset.searchTag) return searchTag(button.dataset.searchTag);
   const actions = {
@@ -756,7 +814,7 @@ function openSearch(query='',filters={},global=false) {
   target.searchOrigin=list.searchOrigin||(names[list.view]?list.view:'library');
   target.searchScope=global?'source':list.searchScope||list.view;
   target.searchFeed=global?'latest':['watched','favorites'].includes(feedFor(list))?feedFor(list):'latest';
-  target.favoriteMode=list.favoriteMode;target.filters=filters;target.sort='source';
+  target.filters=filters;target.sort='source';
   navigate('list',target,null,{replace:list.view==='search'&&entry.screen==='list'});
 }
 document.addEventListener('submit',event=>{
@@ -766,6 +824,9 @@ document.addEventListener('submit',event=>{
   remember();$('#search')?.blur();
 });
 
+const favorites=new Favorites({state,save,getScope:()=>exSession.scope,ensureScope:async()=>{await refreshExSession();return exSession.configured?exSession.scope:null;},request:requestJSON,onChange:updateFavorites});
+for(const target of lists.lists.values())for(const gallery of target.galleries)favorites.remember(gallery);
+
 const features = new SourceFeatures({
   request:requestJSON,toast,state,save,getList:()=>list,getScope:()=>exSession.scope,
   ensureAccount:async()=>{await refreshExSession();return exSession.configured;},
@@ -773,19 +834,13 @@ const features = new SourceFeatures({
     const target=[...lists.lists.values()].find(target=>target.source===list.source&&target.view==='discover'&&feedFor(target)===feed&&!target.query&&JSON.stringify(target.filters||{})===JSON.stringify(list.filters||{}))||lists.create('discover','',list.source);
     target.feed=feed;target.filters={...list.filters};delete target.filters.f_shash;navigate('list',target);
   },
-  onFavoriteMode:(mode,group='')=>{
-    const target=lists.create('favorites',list.view==='favorites'?list.query:'',list.source);target.favoriteMode=mode;target.filters={...(list.view==='favorites'?list.filters:{}),favcat:group};target.sort=mode==='source'?'source':'newest';navigate('list',target);
-  },
   onOpenSearch:()=>{openSearch('',{...list.filters});$('#search')?.focus({preventScroll:true});},
   onSearch:(query,filters,view)=>openSearch(query,filters,view==='library'),
   onPreferences:tags=>{state.tagPreferences=tags;save();if($('#gallery-grid')){renderQuickTags();renderResults();}},
-  onFavoriteSaved:(gallery,change)=>{
-    for(const target of lists.lists.values())if(target.view==='favorites'&&target.favoriteMode==='source'&&target.source===gallery.source){
-      const matches=target.filters?.favcat===undefined || target.filters.favcat==='' || Number(target.filters.favcat)===change.group;
-      if(change.remove || !matches)target.galleries=target.galleries.filter(item=>item.id!==gallery.id);
-      else if(!target.galleries.some(item=>item.id===gallery.id))target.galleries.unshift(gallery);
-    }lists.save();
-  }
+  favoriteInfo:gallery=>favorites.info(gallery.id),
+  onFavoriteKnown:(gallery,info,scope)=>favorites.confirm(gallery,info,scope),
+  onFavoriteSave:saveFavorite,
+  favoriteMessage:favoriteResult
 });
 const listLoader=new InfiniteList(
   key=>{if(list?.key===key)loadGalleries(true,list);},
