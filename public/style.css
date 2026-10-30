@@ -6,3 +6,5 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 
 .reader-content.scroll img{height:auto}
+
+.list-status { display: flex; justify-content: center; padding: 24px 0; }
