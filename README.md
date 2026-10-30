@@ -92,7 +92,15 @@ Safari 中打开 HTTPS 地址 → 分享 → 添加到主屏幕。支持 safe-ar
 
 生产域名：`ehentai.polishwb1020.com`。DNS 托管在阿里云，按 Vercel 对此项目返回的记录配置，保留其他子域名记录。
 
-关联 GitHub 仓库后，将 Vercel 的 Production Branch 设为 `main`。向 `main` 提交会触发生产构建；只有构建成功的新版本才会替换线上版本。其他分支的预览部署遵循项目的 Git 设置。只修改配置文件也需要提交并完成部署，当前网页没有在线配置后台。
+GitHub 仓库：[`polish1020/ehentai-reader`](https://github.com/polish1020/ehentai-reader)。已关联现有 Vercel 项目 `changsheng/ehentai-reader`，Production Branch 为 `main`，构建命令为 `npm run build`，输出目录为 `dist`。
+
+日常修改和发布：
+
+1. 在 GitHub 编辑 [`public/content-policy.json`](https://github.com/polish1020/ehentai-reader/blob/main/public/content-policy.json) 或其他源码。
+2. 将修改提交到 `main`，或者通过 Pull Request 合并到 `main`。
+3. Vercel 自动构建；在项目的 Deployments 页面确认状态为 `Ready` 后，通过正式域名查看新版本。
+
+只有构建成功的新版本才会替换线上版本；构建失败时，线上继续保留前一个成功版本。其他分支的预览部署遵循项目的 Git 设置。只修改配置文件也需要提交并完成部署，当前网页没有在线配置后台。本机的 `.vercel/`、`.env*` 和 `staging/` 不提交到仓库。
 
 ## 参考
 
