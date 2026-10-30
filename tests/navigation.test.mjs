@@ -49,6 +49,19 @@ test('old discovery snapshots switch to popularity once while preserving later e
   assert.equal(store.create('discover').sort,'source');
 });
 
+test('discovery continuation migrates existing popular results and preserves latest-page progress across reloads',()=>{
+  const values=new Map();
+  const storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)};
+  values.set('yijing-navigation-v1',JSON.stringify({version:1,tabs:{},lists:[{key:'popular',view:'discover',query:'',source:'e-hentai',sort:'source',discoveryVersion:1,galleries:[{id:'1/abcdef'}],initialized:true,nextCursor:null}]}));
+  const store=new ListStore(storage),list=store.lists.get('popular');
+  assert.equal(list.discoveryContinuation,true);assert.deepEqual(list.popularIds,['1/abcdef']);
+  assert.equal(list.initialized,true);
+  Object.assign(list,{discoveryContinuation:false,discoveryLatest:true,nextCursor:'latest-page-2'});store.save();
+  const restored=new ListStore(storage).lists.get('popular');
+  assert.equal(restored.discoveryContinuation,false);assert.equal(restored.discoveryLatest,true);
+  assert.equal(restored.nextCursor,'latest-page-2');assert.deepEqual(restored.popularIds,['1/abcdef']);
+});
+
 test('source-specific lists stay isolated and clearing ExHentai removes its snapshots',() => {
   const store=new ListStore();
   const publicList=store.create('library','public query');store.activate(publicList);

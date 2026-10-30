@@ -117,3 +117,5 @@
 .detail-dialog .gallery-summary h2,.detail-dialog .gallery-summary p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .photo-album-back{color:var(--green)}
 .photo-reading{min-width:44px}
+
+.discovery-note{font-size:11px;line-height:1.8;color:var(--muted);margin:0 0 18px}

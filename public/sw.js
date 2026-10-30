@@ -1,6 +1,6 @@
 import {loadCachedImage,clearPrivateImageCaches} from './image-cache.mjs';
 const VERSION = 'yijing-live-v1';
-const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/source.mjs', '/filters.mjs', '/navigation.mjs', '/reader-preload.mjs', '/photo-thumbnails.mjs', '/photo-viewer.mjs', '/image-cache.mjs', '/manifest.webmanifest', '/assets/icon.svg'];
+const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/source.mjs', '/filters.mjs', '/navigation.mjs', '/reader-preload.mjs', '/photo-thumbnails.mjs', '/photo-viewer.mjs', '/discovery.mjs', '/image-cache.mjs', '/manifest.webmanifest', '/assets/icon.svg'];
 const contexts=new Map();
 const contextCache='yijing-image-context-v1';
 const contextKey=id=>new URL(`/__image_context/${id}`,self.location.origin).href;
