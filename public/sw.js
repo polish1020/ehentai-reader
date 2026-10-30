@@ -1,6 +1,6 @@
 import {loadCachedImage,clearPrivateImageCaches} from './image-cache.mjs';
 const VERSION = 'yijing-live-v1';
-const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/source.mjs', '/filters.mjs', '/navigation.mjs', '/image-cache.mjs', '/manifest.webmanifest', '/assets/icon.svg'];
+const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/source.mjs', '/filters.mjs', '/navigation.mjs', '/reader-preload.mjs', '/photo-thumbnails.mjs', '/photo-viewer.mjs', '/image-cache.mjs', '/manifest.webmanifest', '/assets/icon.svg'];
 const contexts=new Map();
 const contextCache='yijing-image-context-v1';
 const contextKey=id=>new URL(`/__image_context/${id}`,self.location.origin).href;
@@ -10,6 +10,7 @@ self.addEventListener('message',event=>{
   if(event.data?.type==='image-context' && event.source?.id){
     const context={source:event.data.source,scope:event.data.scope || null};
     contexts.set(event.source.id,context);
+    event.ports[0]?.postMessage({ok:true});
     event.waitUntil(caches.open(contextCache).then(cache=>cache.put(contextKey(event.source.id),Response.json(context))));
   }
   if(event.data?.type==='clear-private-images')event.waitUntil(clearPrivateImageCaches(event.data.scope));

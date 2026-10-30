@@ -51,10 +51,10 @@
       <div id="category-options" class="category-options"></div>
       <div class="category-apply"><span id="category-count" role="status"></span><button class="primary-button" data-action="apply-categories">应用分类</button></div>
     </fieldset>
-    <label class="setting-row">默认阅读方式<select id="mode-setting"><option value="paged">逐页翻阅</option><option value="scroll">纵向滚动</option></select></label>
+    <label class="setting-row">默认阅读方式<select id="mode-setting"><option value="scroll">上下连续滚动</option><option value="paged">逐页翻阅</option></select></label>
     <label class="setting-row">翻页方向<select id="direction-setting"><option value="ltr">从左到右</option><option value="rtl">从右到左</option></select></label>
     <label class="setting-row">界面主题<select id="theme-setting"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label>
-    <section class="image-cache-settings" aria-labelledby="image-cache-title"><h3 id="image-cache-title">本地图片缓存</h3><p class="setting-help">已加载的封面和原图优先从浏览器缓存读取。每个来源会话最多保留 200 张；ExHentai 缓存随凭证清除。</p><div class="source-actions"><span id="image-cache-count" role="status">正在统计…</span><button class="outline-button" data-action="clear-image-cache">清除图片缓存</button></div></section>
+    <section class="image-cache-settings" aria-labelledby="image-cache-title"><h3 id="image-cache-title">本地图片缓存</h3><p class="setting-help">阅读时预载前后各 5 张图片，已加载的封面和原图优先从浏览器缓存读取。每个来源会话最多保留 200 张；ExHentai 缓存随凭证清除。</p><div class="source-actions"><span id="image-cache-count" role="status">正在统计…</span><button class="outline-button" data-action="clear-image-cache">清除图片缓存</button></div></section>
     <div class="settings-note"><b>在 iPhone 上使用</b><p>用 Safari 打开，点击分享按钮 →「添加到主屏幕」，即可全屏使用。收藏与进度保存在当前浏览器，不会跨设备同步。</p><b>关于内容源</b><p id="source-info">正在读取内容目录…</p><p>交互参考 EhPanda 与 JHentai，独立实现，未复制其源代码或素材。</p></div>
     <button class="danger-button" data-action="clear-history">清除本机阅读记录</button>
   </dialog>
@@ -64,5 +64,6 @@
     <footer class="reader-bottom"><button class="icon-button" data-action="prev" aria-label="上一页">←</button><input id="page-slider" type="range" min="1" max="1" value="1" aria-label="跳转页码"><span id="page-counter"></span><button class="icon-button" data-action="next" aria-label="下一页">→</button></footer>
   </section>
   <div id="toast" role="status" class="toast" hidden></div>
+  <section id="photo-viewer" class="photo-viewer" hidden aria-label="照片预览"></section>
 </body>
 </html>

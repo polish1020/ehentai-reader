@@ -49,3 +49,15 @@ test('failed responses are not cached and each image cache retains at most 200 e
   assert.equal(await imageCacheCount(),200);
   assert.equal(await (await caches.open(imageCacheName('e-hentai'))).match('https://images.example/0'),undefined);
 });
+
+test('a visible image and its simultaneous preload share one network request',async t => {
+  cacheStorage(t);let calls=0,release;
+  const fetchImage=async()=>{calls++;await new Promise(resolve=>{release=resolve;});return new Response('shared image');};
+  const request=new Request('https://reader.example/api/image?gid=123&page=2');
+  const first=loadCachedImage(request,{source:'e-hentai'},fetchImage);
+  const second=loadCachedImage(request,{source:'e-hentai'},fetchImage);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,1);release();
+  const responses=await Promise.all([first,second]);
+  assert.deepEqual(await Promise.all(responses.map(response=>response.text())),['shared image','shared image']);
+});

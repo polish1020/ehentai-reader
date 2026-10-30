@@ -1,6 +1,9 @@
 const sourceAPI='https://e-hentai.org/api.php';
 let exScope = null;
 export function setExScope(scope) { exScope = scope; }
+export function thumbnailSource(src,source) {
+  return source === 'exhentai' && new URL(src).hostname === 's.exhentai.org' ? `/api/thumbnail?${new URLSearchParams({src,scope:exScope || ''})}` : src;
+}
 export function galleryReference(id) {
   const parts = id.split('/');
   const source = parts[0] === 'ex' ? 'exhentai' : 'e-hentai';
@@ -31,7 +34,7 @@ export async function metadata(ids,source='e-hentai') {
       date:new Date(Number(g.posted)*1000).toISOString().slice(0,10),
       tags:g.tags || [],category:g.category,source,
       sourceUrl:`https://${source === 'exhentai' ? 'exhentai' : 'e-hentai'}.org/g/${g.gid}/${g.token}/`,
-      thumb:source === 'exhentai' && new URL(g.thumb).hostname === 's.exhentai.org' ? `/api/thumbnail?${new URLSearchParams({src:g.thumb,scope:exScope || ''})}` : g.thumb,pageCount:Number(g.filecount),rating:g.rating
+      thumb:thumbnailSource(g.thumb,source),pageCount:Number(g.filecount),rating:g.rating
     })));
   }
   return galleries;

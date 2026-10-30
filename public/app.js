@@ -1,6 +1,9 @@
-import {metadata,getGallery,galleryWithPages,galleryReference,setExScope} from './source.mjs';
+import {metadata,getGallery,galleryWithPages,galleryReference,setExScope,thumbnailSource} from './source.mjs';
 import {categories,excludedCategories,tagQuery} from './filters.mjs';
 import {ListStore} from './navigation.mjs';
+import {ReaderPreloader,preloadNeighbors,readerPreference} from './reader-preload.mjs';
+import {ThumbnailStore,ThumbnailView} from './photo-thumbnails.mjs';
+import {PhotoViewer} from './photo-viewer.mjs';
 import {imageCacheCount,clearImageCaches,clearPrivateImageCaches} from './image-cache.mjs';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -11,20 +14,21 @@ try { state = JSON.parse(localStorage.getItem('yijing-v1')) || {}; } catch { sta
 if (!state || typeof state !== 'object' || Array.isArray(state)) state = {};
 state.favorites = Array.isArray(state.favorites) ? state.favorites.filter(id => typeof id === 'string') : [];
 state.progress = state.progress && typeof state.progress === 'object' && !Array.isArray(state.progress) ? state.progress : {};
-state.mode = ['paged','scroll'].includes(state.mode) ? state.mode : 'paged';
+state.mode = readerPreference(state);
 state.direction = state.direction === 'rtl' ? 'rtl' : 'ltr';
 state.theme = ['light','dark','system'].includes(state.theme) ? state.theme : 'system';
 state.categories = Array.isArray(state.categories) ? categories.map(category => category.name).filter(name => state.categories.includes(name)) : categories.map(category => category.name);
 state.source = state.source === 'exhentai' ? 'exhentai' : 'e-hentai';
 let exSession = {configured:false,scope:null}, authRequest = 0;
 const sourceName = source => source === 'exhentai' ? 'ExHentai' : 'E-Hentai';
-const knownGalleries = new Map();
+const knownGalleries = new Map(), thumbnailStores = new Map();
+let detailThumbnails, photoRequest = 0;
 let session;
 try { session = sessionStorage; } catch { /* Keep navigation in memory. */ }
 const lists = new ListStore(session);
 let list, entry, appliedEntry = null, restoringScroll = false, leavingPage = false;
 let activeGallery = null, currentPage = 0, readerMode = state.mode;
-let observer, toastTimer, renderTimer, debounceTarget, scrollTimer, readerRequest = 0, detailRequest = 0;
+let readerPreloader, readerScrollFrame, readerRenderVersion = 0, toastTimer, renderTimer, debounceTarget, scrollTimer, readerRequest = 0, detailRequest = 0;
 let storageWarning = false;
 history.scrollRestoration = 'manual';
 async function requestJSON(path,options={}) {
@@ -139,6 +143,47 @@ async function loadGalleries(append=false,target=list) {
   })();
   return target.pendingRequest;
 }
+function thumbnailStore(gallery) {
+  if (!thumbnailStores.has(gallery.id)) thumbnailStores.set(gallery.id,new ThumbnailStore(async page=>{
+    const params = new URLSearchParams({gid:gallery.gid,token:gallery.token,p:String(page),...(gallery.source === 'exhentai' ? {source:gallery.source} : {})});
+    const data = await requestJSON(`/api/pages?${params}`);
+    data.pages = data.pages.map(thumb=>({...thumb,src:thumbnailSource(thumb.src,gallery.source)}));
+    return data;
+  }));
+  return thumbnailStores.get(gallery.id);
+}
+const photoViewer = new PhotoViewer($('#photo-viewer'),{
+  back,
+  fullscreen:()=>{
+    if (entry.screen === 'photo-full') back();
+    else navigate('photo-full',list,entry.galleryId,{photoIndex:photoViewer.index});
+  },
+  continuous:()=>{
+    state.mode = 'scroll';save();navigate('reader',list,entry.galleryId,{replace:true});
+  },
+  retry:()=>openPhotos(entry.galleryId,entry.photoIndex || 0,entry.screen === 'photo-full'),
+  change:(gallery,index)=>{
+    if (!['photo','photo-full'].includes(entry?.screen)) return;
+    state.progress[gallery.id] = {page:index,time:Date.now()};save();
+    entry.photoIndex = index;history.replaceState(entry,'',entryHash(entry));
+  }
+});
+async function openPhotos(id,index=0,immersive=false) {
+  const request = ++photoRequest;
+  $('#detail-dialog').close();$('#settings-dialog').close();
+  document.body.classList.add('reading');$('.shell').inert = true;$('.sidebar').inert = true;$('.bottom-nav').inert = true;
+  try {
+    let gallery = knownGalleries.get(id);
+    if (!gallery) { photoViewer.loading();const reference=galleryReference(id);gallery = await getGallery(reference.gid,reference.token,reference.source);knownGalleries.set(id,gallery); }
+    if (request !== photoRequest || !['photo','photo-full'].includes(entry.screen) || entry.galleryId !== id) return;
+    if (gallery.source === 'exhentai') await sendImageContext();
+    if (request !== photoRequest) return;
+    photoViewer.show(galleryWithPages(gallery),index,thumbnailStore(gallery),immersive);
+  } catch (error) { if(request===photoRequest)photoViewer.error(error.message); }
+}
+function hidePhotos() {
+  ++photoRequest;photoViewer.hide();document.body.classList.remove('reading');$('.shell').inert = false;$('.sidebar').inert = false;$('.bottom-nav').inert = false;
+}
 async function renderDetail(id) {
   const request = ++detailRequest;
   let g = knownGalleries.get(id);
@@ -151,10 +196,22 @@ async function renderDetail(id) {
       return;
     }
   }
+  if (g.source === 'exhentai') await sendImageContext();
   if (request !== detailRequest || entry.screen !== 'detail' || entry.galleryId !== id) return;
-  $('#detail-body').innerHTML = `<div class="dialog-header"><h2>图集详情</h2><button class="icon-button" data-action="close-detail" aria-label="关闭详情">✕</button></div><div class="gallery-summary"><img class="gallery-cover" src="${escape(imageFor(g))}" alt="${escape(g.title)}"><div class="gallery-summary-copy"><span class="eyebrow">${escape(sourceName(g.source))} / ${escape(g.category)}</span><h2>${escape(g.title)}</h2><div class="gallery-facts"><span>${escape(g.creator)}</span><span>${pageCount(g)} P</span><span>${escape(g.date)}</span></div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><div class="gallery-tags"><div class="gallery-tags-heading"><b>标签</b><span>点击标签查找相关图集</span></div><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '开始阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
+  detailThumbnails?.close();
+  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><span>${pageCount(g)} 张照片</span></div><div class="gallery-summary"><div class="gallery-summary-copy"><span class="eyebrow">${escape(sourceName(g.source))} / ${escape(g.category)}</span><h2>${escape(g.title)}</h2><div class="gallery-facts"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><details class="gallery-tags photo-tag-panel" ${entry.tagsOpen ? 'open' : ''}><summary>标签 · ${g.tags.length}<span>按标签查找相关图集</span></summary><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></details><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
+  detailThumbnails = new ThumbnailView($('#detail-body').querySelector('.photo-album-grid'),$('#detail-dialog'),thumbnailStore(g));
   $('#detail-dialog').scrollTop = entry.detailScroll || 0;
+  if (Number.isInteger(entry.focusPhoto)) {
+    const tile = $('#detail-body').querySelector(`[data-open-photo="${entry.focusPhoto}"]`);
+    if (tile) {
+      const box = tile.getBoundingClientRect(), top = $('#detail-dialog').querySelector('.dialog-header').getBoundingClientRect().bottom;
+      const bottom = $('#detail-dialog').querySelector('.gallery-actions').getBoundingClientRect().top;
+      if (box.top < top || box.bottom > bottom) tile.scrollIntoView({block:'center',behavior:'instant'});
+      tile.focus({preventScroll:true});
+    }
+  }
 }
 function record() { if (!activeGallery) return; state.progress[activeGallery.id] = {page:currentPage, time:Date.now()}; save(); updateCounter(); }
 function updateCounter() {
@@ -162,30 +219,97 @@ function updateCounter() {
   $('[data-action=prev]').disabled = currentPage === 0; $('[data-action=next]').disabled = currentPage === activeGallery.pages.length - 1;
 }
 function updateReaderFavorite() { const b = $('#reader-favorite'); b.textContent = state.favorites.includes(activeGallery.id) ? '♥' : '♡'; b.setAttribute('aria-pressed', String(state.favorites.includes(activeGallery.id))); }
-function readerImage(page, index) { return `<img src="${escape(page.src)}" alt="${escape(page.alt || `${activeGallery.title} · 第 ${index + 1} 页`)}" data-page="${index}" ${readerMode === 'scroll' ? 'loading="lazy"' : ''} draggable="false" width="${page.width || 600}" height="${page.height || 800}">`; }
+function readerImage(page,index) {
+  const dimensions = readerPreloader?.loaded.get(index) || page;
+  return `<div class="reader-page" data-index="${index}" style="aspect-ratio:${dimensions.width || 600}/${dimensions.height || 800}"><span class="reader-placeholder" aria-hidden="true">第 ${index+1} 页</span><img data-src="${escape(page.src)}" alt="${escape(page.alt || `${activeGallery.title} · 第 ${index+1} 页`)}" data-page="${index}" decoding="async" draggable="false" width="${dimensions.width || 600}" height="${dimensions.height || 800}"></div>`;
+}
+function imageDimensions(index,dimensions) {
+  if (!activeGallery || !dimensions.width || !dimensions.height) return;
+  const content = $('#reader-content');
+  const anchor = content.querySelector(`[data-index="${currentPage}"]`);
+  const offset = anchor ? anchor.offsetTop-content.scrollTop : 0;
+  const box = content.querySelector(`[data-index="${index}"]`);
+  if (box) box.style.aspectRatio = `${dimensions.width}/${dimensions.height}`;
+  Object.assign(activeGallery.pages[index],dimensions);
+  if (readerMode === 'scroll' && anchor && index < currentPage) content.scrollTop = anchor.offsetTop-offset;
+}
+function activateImage(index,visible=false) {
+  const img = $('#reader-content').querySelector(`img[data-page="${index}"]`);
+  if (img && !img.hasAttribute('src')) { img.fetchPriority = visible || index === currentPage ? 'high' : 'low'; img.src = img.dataset.src; }
+}
+function activateVisibleImages() {
+  if (!activeGallery || readerMode !== 'scroll') return;
+  const content = $('#reader-content'), boxes = content.querySelectorAll('.reader-page');
+  for (let index=currentPage;index<boxes.length && boxes[index].offsetTop<content.scrollTop+content.clientHeight;index++) activateImage(index,true);
+}
+function updatePreloadWindow() {
+  if (!activeGallery || !readerPreloader) return;
+  activateImage(currentPage);
+  for (const index of preloadNeighbors(currentPage,activeGallery.pages.length)) if (readerPreloader.loaded.has(index)) activateImage(index);
+  readerPreloader.update(currentPage);
+}
+function makePreloader(gallery) {
+  return new ReaderPreloader(gallery.pages.length,(index,signal)=>new Promise((resolve,reject)=>{
+    const image = new Image();image.decoding = 'async';image.fetchPriority = 'low';
+    const cleanup = () => { image.onload = null;image.onerror = null;signal.removeEventListener('abort',abort); };
+    const abort = () => { cleanup();image.removeAttribute('src');reject(new DOMException('Reader closed','AbortError')); };
+    image.onload = () => { const dimensions={width:image.naturalWidth,height:image.naturalHeight};cleanup();resolve(dimensions); };
+    image.onerror = () => { cleanup();reject(new Error('Image preload failed')); };
+    if (signal.aborted) return abort();
+    signal.addEventListener('abort',abort,{once:true});image.src = gallery.pages[index].src;
+  }),(index,dimensions)=>{
+    if (activeGallery !== gallery) return;
+    imageDimensions(index,dimensions);
+    if (Math.abs(index-currentPage) <= 5) activateImage(index);
+  });
+}
 function renderReader() {
-  observer?.disconnect(); const content = $('#reader-content'); content.className = `reader-content ${readerMode}`;
-  content.innerHTML = readerMode === 'paged' ? readerImage(activeGallery.pages[currentPage], currentPage) : activeGallery.pages.map(readerImage).join('');
-  content.querySelectorAll('img').forEach(img => img.addEventListener('error', () => {
-    const box = document.createElement('div'); box.className = 'image-error'; box.innerHTML = '<span>图片暂时无法加载，请检查网络连接。</span><button class="outline-button">重新加载</button>';
-    box.querySelector('button').onclick = () => {
-      box.remove();
-      const retry = new URL(activeGallery.pages[Number(img.dataset.page)].src,location.origin);
-      retry.searchParams.set('retry',String(Date.now()));
-      img.src = retry.href;
-    }; img.after(box);
-  }));
-  if (readerMode === 'scroll') {
-    observer = new IntersectionObserver(entries => { const best = entries.filter(e => e.isIntersecting).sort((a,b) => b.intersectionRatio - a.intersectionRatio)[0]; if (best) { currentPage = Number(best.target.dataset.page); record(); } }, {root:content,threshold:[0,.2,.5,.75]});
-    content.querySelectorAll('img').forEach(img => observer.observe(img));
-    requestAnimationFrame(() => { const img = content.querySelector(`[data-page="${currentPage}"]`); if (img) content.scrollTop = img.offsetTop; });
-  } else {
-    content.scrollTop = 0;
-  }
-  $('[data-action=reader-mode]').textContent = readerMode === 'paged' ? '▤' : '▣';
-  $('[data-action=reader-mode]').setAttribute('aria-label', readerMode === 'paged' ? '切换纵向滚动' : '切换逐页翻阅');
+  cancelAnimationFrame(readerScrollFrame);const version = ++readerRenderVersion;
+  const content = $('#reader-content');content.className = `reader-content ${readerMode}`;
+  content.innerHTML = readerMode === 'paged' ? readerImage(activeGallery.pages[currentPage],currentPage) : activeGallery.pages.map(readerImage).join('');
+  content.querySelectorAll('img').forEach(img => {
+    const index = Number(img.dataset.page);
+    img.addEventListener('load',()=>{
+      if (version !== readerRenderVersion || !activeGallery) return;
+      const dimensions={width:img.naturalWidth,height:img.naturalHeight};
+      readerPreloader?.markLoaded(index,dimensions);imageDimensions(index,dimensions);img.parentElement.dataset.loaded = 'true';
+      activateVisibleImages();
+    });
+    img.addEventListener('error',()=>{
+      if (version !== readerRenderVersion || !activeGallery) return;
+      const box = document.createElement('div');box.className = 'image-error';box.innerHTML = '<span>图片暂时无法加载，请检查网络连接。</span><button class="outline-button">重新加载</button>';
+      box.querySelector('button').onclick = () => {
+        box.remove();const retry = new URL(img.dataset.src,location.origin);retry.searchParams.set('retry',String(Date.now()));img.src = retry.href;
+      };img.after(box);
+    });
+  });
+  const selected = content.querySelector(`[data-index="${currentPage}"]`);
+  content.scrollTop = readerMode === 'scroll' && selected ? selected.offsetTop : 0;
+  updatePreloadWindow();activateVisibleImages();
+  $('[data-action=reader-mode]').textContent = readerMode === 'paged' ? '连续' : '照片';
+  $('[data-action=reader-mode]').setAttribute('aria-label',readerMode === 'paged' ? '切换纵向滚动' : '切换横向照片浏览');
   record();
 }
+$('#reader-content').addEventListener('scroll',()=>{
+  if (!activeGallery || readerMode !== 'scroll') return;
+  cancelAnimationFrame(readerScrollFrame);
+  readerScrollFrame = requestAnimationFrame(()=>{
+    if (!activeGallery || readerMode !== 'scroll') return;
+    const content = $('#reader-content'), boxes = content.querySelectorAll('.reader-page');
+    let low = 0, high = boxes.length-1;
+    while (low < high) { const mid = Math.ceil((low+high)/2);if (boxes[mid].offsetTop <= content.scrollTop+1) low = mid;else high = mid-1; }
+    if (content.scrollTop+content.clientHeight >= content.scrollHeight-2) low = boxes.length-1;
+    if (currentPage !== low) { currentPage = low;record();updatePreloadWindow(); }
+    activateVisibleImages();
+  });
+},{passive:true});
+let readerWidth = 0;
+new ResizeObserver(entries=>{
+  const width = entries[0].contentRect.width;
+  if (width === readerWidth) return;
+  readerWidth = width;
+  if (activeGallery && readerMode === 'scroll') goPage(currentPage);
+}).observe($('#reader-content'));
 async function openReader(id) {
   const request = ++readerRequest;
   $('#detail-dialog').close(); $('#settings-dialog').close();
@@ -201,7 +325,7 @@ async function openReader(id) {
     const g = known ? galleryWithPages(known) : await getGallery(gid,token,source);
     if (request !== readerRequest || entry.screen !== 'reader' || entry.galleryId !== id) return;
     knownGalleries.set(g.id,g);
-    activeGallery = g; currentPage = progressFor(g); readerMode = state.mode;
+    activeGallery = g; currentPage = progressFor(g); readerMode = state.mode; readerPreloader?.close(); readerPreloader = makePreloader(g);
     $('#reader-title').textContent = g.title; $('#reader-source').textContent = `${sourceName(g.source)} · ${g.category}`;
     $('#page-slider').disabled = false;
     for (const action of ['reader-mode','reader-favorite']) $(`[data-action=${action}]`).disabled = false;
@@ -212,19 +336,19 @@ async function openReader(id) {
   }
 }
 function hideReader() {
-  ++readerRequest; record(); observer?.disconnect(); activeGallery = null;
+  ++readerRequest; ++readerRenderVersion; cancelAnimationFrame(readerScrollFrame); record(); readerPreloader?.close(); readerPreloader = null; activeGallery = null;
   $('#reader').hidden = true; document.body.classList.remove('reading'); $('.shell').inert = false; $('.sidebar').inert = false; $('.bottom-nav').inert = false;
   $('#reader-content').replaceChildren();
 }
 function goPage(page) {
   if (!activeGallery) return; currentPage = Math.max(0,Math.min(activeGallery.pages.length - 1,page));
-  if (readerMode === 'scroll') { const img = $('#reader-content').querySelector(`[data-page="${currentPage}"]`); $('#reader-content').scrollTo({top:img.offsetTop,behavior:'instant'}); record(); }
+  if (readerMode === 'scroll') { const box = $('#reader-content').querySelector(`[data-index="${currentPage}"]`); updatePreloadWindow(); if (box) $('#reader-content').scrollTo({top:box.offsetTop,behavior:'instant'}); record(); }
   else renderReader();
 }
 function remember() {
   if (!list || !entry) return;
   if (!restoringScroll && !document.body.classList.contains('reading')) list.scrollY = window.scrollY;
-  if ($('#detail-dialog').open) entry.detailScroll = $('#detail-dialog').scrollTop;
+  if ($('#detail-dialog').open) { entry.detailScroll = $('#detail-dialog').scrollTop;entry.tagsOpen = !!$('#detail-dialog').querySelector('.photo-tag-panel')?.open; }
   history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source}},'');
   lists.save();
 }
@@ -236,17 +360,22 @@ function restoreScroll() {
     requestAnimationFrame(() => { restoringScroll = false; });
   });
 }
-function makeEntry(screen,target,galleryId=null,parent=false) {
-  return {yijingNav:1,key:crypto.randomUUID(),listKey:target.key,view:target.view,source:target.source,screen,galleryId,parent,fallback:{view:target.view,query:target.query,sort:target.sort,listMode:target.listMode,source:target.source}};
+function makeEntry(screen,target,galleryId=null,parent=false,photoIndex=0) {
+  return {yijingNav:1,key:crypto.randomUUID(),listKey:target.key,view:target.view,source:target.source,screen,galleryId,parent,photoIndex,fallback:{view:target.view,query:target.query,sort:target.sort,listMode:target.listMode,source:target.source}};
 }
-function entryHash(value) { return value.screen === 'reader' ? `#read/${value.galleryId}` : value.screen === 'detail' ? `#gallery/${value.galleryId}` : `#${value.view}`; }
+function entryHash(value) {
+  if (['photo','photo-full'].includes(value.screen)) return `#${value.screen}/${value.galleryId}/${(value.photoIndex || 0)+1}`;
+  return value.screen === 'reader' ? `#read/${value.galleryId}` : value.screen === 'detail' ? `#gallery/${value.galleryId}` : `#${value.view}`;
+}
 function adoptLocation() {
   const hash = location.hash || '#discover';
   if (history.state?.yijingNav === 1 && entryHash(history.state) === hash) return history.state;
   const [screen,...parts] = hash.slice(1).split('/');
   const view = names[screen] ? screen : 'discover';
   const target = names[screen] ? lists.tab(view,state.source) || lists.create(view,'',state.source) : list || lists.tab(view,state.source) || lists.create(view,'',state.source);
-  const value = makeEntry(screen === 'read' ? 'reader' : screen === 'gallery' ? 'detail' : 'list',target,parts.join('/') || null);
+  const photoScreen = ['photo','photo-full'].includes(screen);
+  const photoIndex = photoScreen ? Math.max(0,Number(parts.pop())-1 || 0) : 0;
+  const value = makeEntry(photoScreen ? screen : screen === 'read' ? 'reader' : screen === 'gallery' ? 'detail' : 'list',target,parts.join('/') || null,false,photoIndex);
   history.replaceState(value,'',entryHash(value));
   return value;
 }
@@ -254,7 +383,13 @@ function applyNavigation() {
   flushSearch();
   const next = adoptLocation();
   if (next.key === appliedEntry) return;
-  const previous = list;
+  const previous = list, previousEntry = entry;
+  if (next.screen === 'detail' && previousEntry?.galleryId === next.galleryId && ['reader','photo','photo-full'].includes(previousEntry.screen)) next.focusPhoto = previousEntry.screen === 'reader' ? currentPage : photoViewer.index;
+  if (next.screen === 'photo' && previousEntry?.galleryId === next.galleryId) {
+    if (previousEntry.screen === 'photo-full') next.photoIndex = photoViewer.index;
+    if (previousEntry.screen === 'reader') next.photoIndex = currentPage;
+    history.replaceState(next,'',entryHash(next));
+  }
   entry = next; appliedEntry = next.key;
   list = lists.lists.get(next.listKey);
   if (!list) {
@@ -268,13 +403,15 @@ function applyNavigation() {
   lists.activate(list);
   sendImageContext();
   list.galleries.forEach(g => knownGalleries.set(g.id,g));
-  ++detailRequest;
+  ++detailRequest;detailThumbnails?.close();detailThumbnails = null;
+  if (!['photo','photo-full'].includes(entry.screen) && !$('#photo-viewer').hidden) hidePhotos();
   if (!$('#reader').hidden) hideReader();
   $('#detail-dialog').close(); $('#settings-dialog').close();
   const changed = previous !== list;
   if (changed || !$('#gallery-grid')) render();
   else if (entry.screen === 'list') renderResults();
   if (entry.screen === 'reader') openReader(entry.galleryId);
+  else if (['photo','photo-full'].includes(entry.screen)) openPhotos(entry.galleryId,entry.photoIndex || 0,entry.screen === 'photo-full');
   else {
     restoreScroll();
     if (entry.screen === 'detail') renderDetail(entry.galleryId);
@@ -283,9 +420,9 @@ function applyNavigation() {
   }
   lists.save();
 }
-function navigate(screen,target=list,galleryId=null,{replace=false}={}) {
+function navigate(screen,target=list,galleryId=null,{replace=false,photoIndex=0}={}) {
   remember();
-  const value = makeEntry(screen,target,galleryId,!replace);
+  const value = makeEntry(screen,target,galleryId,replace ? !!entry?.parent : true,photoIndex);
   history[replace ? 'replaceState' : 'pushState'](value,'',entryHash(value));
   applyNavigation();
 }
@@ -314,7 +451,16 @@ window.addEventListener('scroll',() => {
   clearTimeout(scrollTimer); scrollTimer = setTimeout(remember,150);
 },{passive:true});
 function sendImageContext() {
-  navigator.serviceWorker?.controller?.postMessage({type:'image-context',source:list?.source || state.source,scope:exSession.scope});
+  const worker = navigator.serviceWorker?.controller;
+  if (!worker) return Promise.resolve();
+  const source = entry?.galleryId && entry.screen !== 'list' ? galleryReference(entry.galleryId).source : list?.source || state.source;
+  return new Promise(resolve=>{
+    const channel = new MessageChannel();
+    const finish = () => { clearTimeout(timer);channel.port1.close();resolve(); };
+    const timer = setTimeout(finish,1000);
+    channel.port1.onmessage = finish;
+    worker.postMessage({type:'image-context',source,scope:exSession.scope},[channel.port2]);
+  });
 }
 async function refreshExSession() {
   const request = ++authRequest, checked = await requestJSON('/api/ex-session');
@@ -331,7 +477,7 @@ function updateSourceSettings() {
 function purgeExLists() {
   for (const target of lists.lists.values()) if (target.source === 'exhentai') target.requestId = (target.requestId || 0) + 1;
   lists.removeSource('exhentai');
-  for (const [key,g] of knownGalleries) if (g.source === 'exhentai') knownGalleries.delete(key);
+  for (const [key,g] of knownGalleries) if (g.source === 'exhentai') { knownGalleries.delete(key);thumbnailStores.delete(key); }
 }
 function switchSource(source) {
   if (source === 'exhentai' && !exSession.configured) { updateSourceSettings(); return; }
@@ -401,6 +547,7 @@ document.addEventListener('click', event => {
   const link = event.target.closest('a[href^="#"]');
   if (link && names[link.hash.slice(1)] && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.button === 0) { event.preventDefault(); navigateTab(link.hash.slice(1)); return; }
   const button = event.target.closest('button'); if (!button) return;
+  if (button.hasAttribute('data-open-photo')) return navigate('photo',list,entry.galleryId,{photoIndex:Number(button.dataset.openPhoto)});
   if (button.dataset.open) return navigate('detail',list,button.dataset.open);
   if (button.dataset.favorite) return favorite(button.dataset.favorite);
   if (button.dataset.read) return navigate('reader',list,button.dataset.read);
@@ -413,7 +560,7 @@ document.addEventListener('click', event => {
     'load-more':() => loadGalleries(true), 'retry-list':() => loadGalleries(list.pendingAppend), 'retry-reader':() => openReader(entry.galleryId),
     theme:() => { state.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; save(); theme(); },
     settings, 'close-settings':() => $('#settings-dialog').close(), 'close-detail':back,
-    'exit-reader':back, 'reader-mode':() => { readerMode = readerMode === 'paged' ? 'scroll' : 'paged'; state.mode = readerMode; save(); renderReader(); },
+    'exit-reader':back, 'reader-mode':() => { if (readerMode === 'scroll') navigate('photo',list,activeGallery.id,{replace:true,photoIndex:currentPage}); else { readerMode = 'scroll';state.mode = 'scroll';save();renderReader(); } },
     'reader-favorite':() => favorite(activeGallery.id), prev:() => goPage(currentPage - 1), next:() => goPage(currentPage + 1),
     view:() => { remember(); list.listMode = !list.listMode; render(); restoreScroll(); remember(); }, 'clear-history':() => { if (confirm('清除这台设备上的全部阅读记录？收藏会保留。')) { state.progress = {}; save(); renderResults(); remember(); toast('已清除阅读记录'); } }
   }; actions[button.dataset.action]?.();
