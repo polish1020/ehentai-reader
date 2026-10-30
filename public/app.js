@@ -113,32 +113,30 @@ function renderResults() {
   if (sourceSort) sourceSort.textContent = popularFeed(list) ? list.discoveryLatest ? list.popularIds?.length ? '推荐顺序' : '最新顺序' : '热门顺序' : '源站顺序';
   const note = rankingFeed(list) ? `榜单由 E-Hentai 提供，图集按 ${sourceName(list.source)} 打开，并应用当前全局分类。` : popularFeed(list) && list.discoveryLatest ? list.discoveryFallback === 'unavailable' ? '热门暂时不可用，已切换到最新图集。' : list.popularIds?.length ? '热门已看完，继续浏览最新图集。' : '当前分类暂无热门，已切换到最新图集。' : '';
   $('#discovery-note').textContent = note;$('#discovery-note').hidden = !note;
-  const items = filtered(); $('#result-count').textContent = list.isLoading ? '正在请求源站…' : `${items.length} 本图集`;
-  $('#result-heading').hidden = route()==='search' && !searchReady(list);
+  const items = filtered(); $('#result-count').textContent = list.isLoading ? '加载中…' : `${items.length} 本图集`;
+  $('#result-heading h1').hidden = route()==='search' && !searchReady(list);
   $('#gallery-grid').className = `grid ${list.listMode ? 'list-mode' : ''}`;
   const emptyMessages = {favorites:['还没有收藏','点击图集右上角的爱心，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
-  const [title, message] = route()==='search' && !searchReady(list) ? ['搜索图集','输入关键词，或在更多选项中使用高级搜索与以图搜图。'] : !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : rankingFeed(list) && list.nextCursor ? ['本页暂无符合筛选的图集','可继续加载后面的排名，或调整全局分类和筛选条件。'] : list.query || route()==='search' && searchReady(list) || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[collectionView(list)] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
+  const [title, message] = route()==='search' && !searchReady(list) ? ['搜索图集','输入关键词，或在筛选中使用高级搜索与以图搜图。'] : !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : rankingFeed(list) && list.nextCursor ? ['本页暂无符合筛选的图集','可继续加载后面的排名，或调整全局分类和筛选条件。'] : list.query || route()==='search' && searchReady(list) || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[collectionView(list)] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
   $('#gallery-grid').innerHTML = items.length ? items.map(card).join('') : list.isLoading ? '<div class="loading">正在获取实时图集…</div>' : list.listError ? '' : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">${icons[route()]}</div><h3>${title}</h3><p>${message}</p></div>`;
   const more=!!list.nextCursor || popularFeed(list)&&list.discoveryContinuation;
   $('#list-status').innerHTML=list.listError?`<div class="empty"><p role="alert">${escape(list.listError)}</p><button class="outline-button" data-action="retry-list">重试</button></div>`:more?`<div class="load-sentinel" data-loading="${list.isLoading}" role="status" aria-live="polite">${list.isLoading?'正在加载…':'上滑加载更多'}</div>`:items.length&&!list.isLoading?'<span class="list-end">已经到底了</span>':'';
   listLoader.watch($('#list-status .load-sentinel'),list.key);
   decorateIcons();
 }
-function renderHero() {
+function renderQuickTags() {
   const visible = list.galleries.filter(g => g.source === list.source && state.categories.includes(g.category) && accepts(g,list.filters,state.tagPreferences));
-  const hero = visible.find(gallery => list.popularIds?.includes(gallery.id));
-  $('#hero').innerHTML = popularFeed(list) && hero ? `<section class="hero"><div class="hero-copy"><span class="hero-tag">✧ 源站热门 · ${escape(sourceName(list.source))}</span><h2>此刻，大家都在看</h2><p>最近 24 小时发布的热门图集，<br>按源站实时热度发现新作品。</p><button class="primary-button" data-open="${escape(hero.id)}">翻开图集 <span>↗</span></button></div><img class="hero-art" src="${escape(imageFor(hero))}" alt="${escape(hero.title)}"><span class="hero-edition">YOUR GALLERY READER</span></section>` : '';
   const tags = quickTags(visible,state.tagPreferences);
   $('#tag-filters').innerHTML = ['全部',...tags].map(tag => { const active = tag === '全部' ? !list.query : list.query === tagQuery(tag); return `<button ${tagAttributes(tag)} class="chip ${active ? 'active' : ''} ${state.tagPreferences.some(pref=>pref.tag===tag&&pref.watch)?'watched-tag':''}" ${tag === '全部' ? 'data-action="clear-search"' : `data-search-tag="${escape(tag)}"`} aria-pressed="${active}">${escape(tag)}</button>`; }).join('');
 }
 function render() {
   nav();const view=route(),searchPage=view==='search';
   document.body.classList.toggle('searching',searchPage);
-  const titles={discover:['发现此刻的热门。',rankingFeed(list)?'E-Hentai 公共排行榜，图集按 '+sourceName(list.source)+' 打开。':feedFor(list)==='watched'?'根据源站账号关注标签浏览图集。':sourceName(list.source)+' Popular，热门优先，继续浏览最新图集，应用你的全局分类。'],favorites:['收藏你的心动瞬间。','喜欢的作品，在这里重逢。'],history:['从上次停下的地方，继续。','每一段阅读，都值得被记住。'],library:['属于你的，图像世界。','搜索源站图集，寻找下一次灵感。']};
   const placeholder=localCollection(list)?collectionView(list)==='favorites'?'搜索本机收藏':'搜索阅读足迹':feedFor(list)==='favorites'?'搜索源站收藏':`搜索 ${sourceName(list.source)} 图集`;
-  const heading=searchPage?`<header class="search-page-header"><button class="icon-button" data-action="search-back" aria-label="返回上一页">${icon('back')}</button><form id="search-page-form"><label class="search"><span aria-hidden="true">${icon('search')}</span><input id="search" type="search" enterkeyhint="search" placeholder="${placeholder}" value="${escape(list.query)}" aria-label="搜索图集" autocomplete="off"></label><button class="primary-button search-submit" type="submit">搜索</button></form></header>`:`<div class="heading-row"><div><div class="eyebrow">${view==='discover'?'A QUIET SPACE FOR YOUR INSPIRATION':'YOUR PERSONAL COLLECTION'}</div><h1>${titles[view][0]}</h1><p class="intro">${titles[view][1]}</p></div><span class="date-note">A little escape, a new perspective.</span></div>`;
-  $('#main').innerHTML=`${heading}<div id="hero"></div>${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h2><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h2><div class="view-options"><button class="category-button" data-action="settings" aria-label="设置全局分类">分类 · ${state.categories.length===categories.length?'全部':state.categories.length}</button><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">↻</button><select id="sort" aria-label="图集排序">${view==='discover'||searchPage||feedFor(list)==='favorites'?'<option value="source">源站顺序</option>':''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${icon(list.listMode?'grid':'list')}</button></div></div><div class="toolbar"><div id="tag-filters" class="chips"></div></div><p id="discovery-note" class="discovery-note" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
-  $('#sort').value=list.sort;renderHero();renderResults();decorateIcons();
+  const heading=searchPage?`<header class="search-page-header"><button class="icon-button" data-action="search-back" aria-label="返回上一页">${icon('back')}</button><form id="search-page-form"><label class="search"><span aria-hidden="true">${icon('search')}</span><input id="search" type="search" enterkeyhint="search" placeholder="${placeholder}" value="${escape(list.query)}" aria-label="搜索图集" autocomplete="off"></label><button class="primary-button search-submit" type="submit">搜索</button></form></header>`:'';
+  const options=`<div class="list-tool-row"><span>全局分类</span><button class="category-button" data-action="settings" aria-label="设置全局分类">${state.categories.length===categories.length?'全部分类':`已选 ${state.categories.length} 类`} ${icon('next')}</button></div><label class="list-tool-row">排序<select id="sort" aria-label="图集排序">${view==='discover'||searchPage||feedFor(list)==='favorites'?'<option value="source">源站顺序</option>':''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select></label><div class="list-tool-row"><span>列表操作</span><div class="list-tool-buttons"><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">${icon('refresh')}</button><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${icon(list.listMode?'grid':'list')}</button></div></div>`;
+  $('#main').innerHTML=`${heading}${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h1><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h1>${features.tools(list,options,state.categories.length!==categories.length)}</div><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
+  $('#sort').value=list.sort;renderQuickTags();renderResults();decorateIcons();
 }
 async function loadGalleries(append=false,target=list) {
   if (renderTimer && debounceTarget === target) { clearTimeout(renderTimer); renderTimer = null; debounceTarget = null; }
@@ -151,7 +149,7 @@ async function loadGalleries(append=false,target=list) {
   if (!append) { target.galleries = []; target.nextCursor = null; target.scrollY = 0;target.discoveryContinuation = false;target.discoveryLatest = false;target.popularIds = [];target.discoveryFallback = null; }
   const emptySearch=view==='search'&&!searchReady(target);
   if (!selected.length || emptySearch) { target.isLoading = false; target.nextCursor = null; }
-  if (target === list) { renderHero(); renderResults(); if (!append && entry.screen === 'list') restoreScroll(); }
+  if (target === list) { renderQuickTags(); renderResults(); if (!append && entry.screen === 'list') restoreScroll(); }
   lists.save();
   if (!selected.length || emptySearch) return;
   target.pendingRequest = (async () => {
@@ -187,7 +185,7 @@ async function loadGalleries(append=false,target=list) {
     finally {
       if (!leavingPage && request === target.requestId) {
         target.isLoading = false; target.pendingRequest = null;
-        if (target === list) { renderHero(); renderResults(); }
+        if (target === list) { renderQuickTags(); renderResults(); }
         lists.save();
       }
     }
@@ -643,6 +641,8 @@ function settings() {
   $('#settings-dialog').scrollTop = 0;
 }
 document.addEventListener('click', event => {
+  const tools=$('.advanced-tools[open]');
+  if(tools && (!tools.contains(event.target)||event.target.closest('[data-action=settings],[data-feature], [data-search-tag]')))tools.open=false;
   const link = event.target.closest('a[href^="#"]');
   if (link && names[link.hash.slice(1)] && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.button === 0) { event.preventDefault(); navigateTab(link.hash.slice(1)); return; }
   const button = event.target.closest('button'); if (!button) return;
@@ -687,6 +687,7 @@ document.addEventListener('change', event => {
   if (id === 'theme-setting') { state.theme = event.target.value; save(); theme(); }
 });
 document.addEventListener('keydown', event => {
+  if(event.key==='Escape'&&$('.advanced-tools[open]')){const tools=$('.advanced-tools');tools.open=false;tools.querySelector('summary').focus();return;}
   if (entry.screen !== 'reader') return;
   if (event.key === 'Escape') { event.preventDefault(); back(); }
   if (!activeGallery) return;
@@ -748,7 +749,7 @@ const features = new SourceFeatures({
   },
   onOpenSearch:()=>{openSearch('',{...list.filters});$('#search')?.focus({preventScroll:true});},
   onSearch:(query,filters,view)=>openSearch(query,filters,view==='library'),
-  onPreferences:tags=>{state.tagPreferences=tags;save();if($('#gallery-grid')){renderHero();renderResults();}},
+  onPreferences:tags=>{state.tagPreferences=tags;save();if($('#gallery-grid')){renderQuickTags();renderResults();}},
   onFavoriteSaved:(gallery,change)=>{
     for(const target of lists.lists.values())if(target.view==='favorites'&&target.favoriteMode==='source'&&target.source===gallery.source){
       const matches=target.filters?.favcat===undefined || target.filters.favcat==='' || Number(target.filters.favcat)===change.group;

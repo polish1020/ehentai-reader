@@ -25,7 +25,12 @@ export class SourceFeatures {
     const advanced=list.filters||{};
     const tabs=list.view==='discover'?`<nav class="feed-tabs" aria-label="发现内容"><div role="tablist">${feeds.map(([id,label])=>`<button role="tab" aria-selected="${feedFor(list)===id}" data-feature="feed" data-feed="${id}">${label}</button>`).join('')}</div></nav>`:'';
     const favorites=list.view==='favorites'?`<div class="favorite-modes">${button('local-favorites','本机收藏',`aria-pressed="${list.favoriteMode!=='source'}"`)}${button('source-favorites','源站收藏',`aria-pressed="${list.favoriteMode==='source'}"`)}${list.favoriteMode==='source'?`<label class="favorite-group-label">分组<select data-feature-select="favorite-group"><option value="">全部分组</option>${Array.from({length:10},(_,id)=>`<option value="${id}" ${String(advanced.favcat)===String(id)?'selected':''}>${esc(this.groups.find(group=>group.id===id)?.name||`收藏分组 ${id+1}`)}</option>`).join('')}</select></label>`:''}</div>`:'';
-    return tabs+favorites+`<div class="browse-actions">${list.view==='search'?'':button('search',`${icon('search')}搜索`,'aria-label="搜索图集"')}<details class="advanced-tools"><summary>${icon('filter')}<span>更多选项</span>${Object.entries(advanced).some(([key,value])=>key!=='favcat'&&value)?'<small>有筛选</small>':''}<span class="disclosure-icon">${icon('down')}</span></summary><div class="source-tools">${button('advanced',`${icon('filter')}高级搜索`)}${button('image-search',`${icon('image')}以图搜图`)}${button('tags',`${icon('tag')}标签偏好`)}</div></details></div>`+(advanced.f_shash?`<p class="feature-note">正在显示图片搜索结果 ${button('clear-image','退出以图搜图')}</p>`:'');
+    return tabs+favorites;
+  }
+  tools(list,content,categoryFiltered=false) {
+    const advanced=list.filters||{};
+    const active=categoryFiltered||Object.entries(advanced).some(([key,value])=>key!=='favcat'&&value);
+    return `<details class="advanced-tools"><summary aria-label="筛选与列表选项">${icon('filter')}<span>筛选</span>${active?'<small>已启用</small>':''}</summary><div class="list-tools-panel">${content}<div class="source-tools">${button('advanced',`${icon('filter')}高级搜索`)}${button('image-search',`${icon('image')}以图搜图`)}${button('tags',`${icon('tag')}标签偏好`)}</div>${advanced.f_shash?`<p class="feature-note">正在显示图片搜索结果 ${button('clear-image','退出以图搜图')}</p>`:''}<div class="suggested-tags"><span>快捷标签</span><div id="tag-filters" class="chips"></div></div><p id="discovery-note" class="discovery-note" hidden></p></div></details>`;
   }
   mountGallery(gallery,root) {
     this.gallery=gallery;
