@@ -290,5 +290,9 @@ body.searching main{padding-top:8px}
 
 [data-favorite][aria-pressed=true] .ui-icon{fill:currentColor}
 
-.card-favorite-state{position:absolute;top:8px;right:8px;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface);color:var(--green);pointer-events:none}
-.card-favorite-state .ui-icon{width:18px;height:18px;fill:currentColor}
+.page-badge{display:inline-flex;align-items:center;gap:5px}
+.card-favorite-state{display:inline-flex;align-items:center;width:12px;height:12px;flex-shrink:0;pointer-events:none}
+.card-favorite-state .ui-icon{width:12px;height:12px;fill:currentColor}
+
+.rating-badge{position:absolute;left:10px;bottom:10px;display:inline-flex;align-items:center;gap:4px;padding:4px 6px;border-radius:4px;background:#20362abb;color:#fff;font-size:10px;line-height:1.2}
+.rating-badge .ui-icon{width:12px;height:12px;fill:currentColor}
