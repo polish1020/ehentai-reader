@@ -31,6 +31,13 @@
   <dialog id="detail-dialog" class="detail-dialog"><div id="detail-body"></div></dialog>
   <dialog id="settings-dialog" class="settings-dialog">
     <div class="dialog-header"><h2>阅读偏好</h2><button class="icon-button" data-action="close-settings" aria-label="关闭">✕</button></div>
+    <fieldset class="category-settings">
+      <legend>全局筛选分类</legend>
+      <p class="setting-help">使用 E-Hentai 顶级分类，可多选。应用于发现、搜索、收藏和足迹，保存在当前浏览器。</p>
+      <div class="category-controls"><button class="text-button" data-action="select-all-categories">全选</button><button class="text-button" data-action="clear-categories">清空</button></div>
+      <div id="category-options" class="category-options"></div>
+      <div class="category-apply"><span id="category-count" role="status"></span><button class="primary-button" data-action="apply-categories">应用分类</button></div>
+    </fieldset>
     <label class="setting-row">默认阅读方式<select id="mode-setting"><option value="paged">逐页翻阅</option><option value="scroll">纵向滚动</option></select></label>
     <label class="setting-row">翻页方向<select id="direction-setting"><option value="ltr">从左到右</option><option value="rtl">从右到左</option></select></label>
     <label class="setting-row">界面主题<select id="theme-setting"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label>

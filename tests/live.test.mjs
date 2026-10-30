@@ -9,17 +9,18 @@ import {createApp} from '../scripts/serve.mjs';
 const listing='<a href="https://e-hentai.org/g/1/abcdef/">Gallery</a><a href="https://e-hentai.org/g/1/abcdef/">Duplicate</a><a id="unext" href="/?next=100&amp;f_search=test">Next</a>';
 const request=path => new Request(`http://localhost${path}`);
 
-test('search forwards query and cursor and returns only IDs for direct client metadata requests',async t => {
+test('search forwards query, category mask and cursor and returns only IDs for direct client metadata requests',async t => {
   const calls=[];
   t.mock.method(globalThis,'fetch',async (url,options) => {
     calls.push({url:new URL(url),options});return new Response(listing);
   });
-  const response=await galleries(request('/api/galleries?q=any%20tag&next=123'));
+  const response=await galleries(request('/api/galleries?q=any%20tag&next=123&f_cats=959'));
   assert.equal(response.status,200);
   assert.equal(response.headers.get('cache-control'),'no-store');
   assert.equal(calls.length,1);
   assert.equal(calls[0].url.searchParams.get('f_search'),'any tag');
   assert.equal(calls[0].url.searchParams.get('next'),'123');
+  assert.equal(calls[0].url.searchParams.get('f_cats'),'959');
   assert.deepEqual(await response.json(),{ids:[[1,'abcdef']],next:'100'});
 });
 

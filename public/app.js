@@ -1,4 +1,5 @@
 import {metadata,getGallery} from './source.mjs';
+import {categories,excludedCategories,tagQuery} from './filters.mjs';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const names = {discover:'发现', favorites:'收藏', history:'足迹', library:'全部图集'};
@@ -11,9 +12,10 @@ state.progress = state.progress && typeof state.progress === 'object' && !Array.
 state.mode = ['paged','scroll'].includes(state.mode) ? state.mode : 'paged';
 state.direction = state.direction === 'rtl' ? 'rtl' : 'ltr';
 state.theme = ['light','dark','system'].includes(state.theme) ? state.theme : 'system';
+state.categories = Array.isArray(state.categories) ? categories.map(category => category.name).filter(name => state.categories.includes(name)) : categories.map(category => category.name);
 const knownGalleries = new Map();
 let galleries = [], activeGallery = null, currentPage = 0, readerMode = state.mode;
-let filter = '全部', query = '', sort = 'newest', listMode = false, observer, toastTimer, renderTimer, returnRoute = 'discover';
+let pendingSearch = null, query = '', sort = 'newest', listMode = false, observer, toastTimer, renderTimer, returnRoute = 'discover';
 let storageWarning = false, nextCursor = null, listRequest = 0, readerRequest = 0, isLoading = false, listError = '';
 async function requestJSON(path) {
   const response = await fetch(path,{cache:'no-store'});
@@ -55,8 +57,7 @@ function card(g) {
   return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${pageCount(g)} P</span></div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span></div><div class="card-tags">${g.tags.slice(0,3).map(tag => `<span>${escape(tag)}</span>`).join('')}</div>${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button><button class="favorite-button" data-favorite="${escape(g.id)}" aria-label="收藏 ${escape(g.title)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥' : '♡'}</button></article>`;
 }
 function filtered() {
-  let items = galleries.filter(g => (route() !== 'favorites' || state.favorites.includes(g.id)) && (route() !== 'history' || state.progress[g.id]));
-  if (filter !== '全部') items = items.filter(g => g.tags.includes(filter));
+  let items = galleries.filter(g => state.categories.includes(g.category) && (route() !== 'favorites' || state.favorites.includes(g.id)) && (route() !== 'history' || state.progress[g.id]));
   const q = query.trim().toLowerCase();
   if (q && ['favorites','history'].includes(route())) items = items.filter(g => [g.title,g.creator,...g.tags].join(' ').toLowerCase().includes(q));
   return items.sort((a,b) => route() === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
@@ -66,25 +67,27 @@ function renderResults() {
   const items = filtered(); $('#result-count').textContent = isLoading ? '正在请求源站…' : `${items.length} 本图集`;
   $('#gallery-grid').className = `grid ${listMode ? 'list-mode' : ''}`;
   const emptyMessages = {favorites:['还没有收藏','点击图集右上角的爱心，把喜欢的作品留在这里。'], history:['还没有阅读足迹','打开一本图集开始阅读，之后可以从上次的位置继续。']};
-  const [title, message] = query || filter !== '全部' ? ['没有找到匹配图集','试试其他关键词，或切换为「全部」。'] : emptyMessages[route()] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
+  const [title, message] = !state.categories.length ? ['尚未选择分类','打开阅读偏好，选择你想浏览的分类。'] : query || state.categories.length < categories.length ? ['没有找到匹配图集','试试其他关键词，或调整全局分类。'] : emptyMessages[route()] || ['暂无可阅读图集','稍后重试，或搜索你感兴趣的作品。'];
   $('#gallery-grid').innerHTML = items.length ? items.map(card).join('') : isLoading ? '<div class="loading">正在获取实时图集…</div>' : listError ? '' : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">${icons[route()]}</div><h3>${title}</h3><p>${message}</p></div>`;
   $('#list-status').innerHTML = listError ? `<div class="empty"><p role="alert">${escape(listError)}</p><button class="outline-button" data-action="retry-list">重新加载</button></div>` : nextCursor ? `<button class="outline-button" data-action="load-more" ${isLoading ? 'disabled' : ''}>${isLoading ? '正在加载…' : '加载更多'}</button>` : '';
 }
 function renderHero() {
-  const hero = galleries[0];
+  const visible = galleries.filter(g => state.categories.includes(g.category));
+  const hero = visible[0];
   $('#hero').innerHTML = route() === 'discover' && hero ? `<section class="hero"><div class="hero-copy"><span class="hero-tag">✧ 实时发现 · E-HENTAI</span><h2>翻开新的世界<br>发现此刻的灵感</h2><p>从喜欢的作品出发，<br>收藏每一次新的相遇。</p><button class="primary-button" data-open="${escape(hero.id)}">翻开图集 <span>↗</span></button></div><img class="hero-art" src="${escape(imageFor(hero))}" alt="${escape(hero.title)}"><span class="hero-edition">YOUR GALLERY READER</span></section>` : '';
-  const tags = [...new Set(galleries.flatMap(g => g.tags))].slice(0,5);
-  $('#tag-filters').innerHTML = ['全部',...tags].map(tag => `<button class="chip ${filter === tag ? 'active' : ''}" data-tag="${escape(tag)}" aria-pressed="${filter === tag}">${escape(tag)}</button>`).join('');
+  const tags = [...new Set(visible.flatMap(g => g.tags))].slice(0,5);
+  $('#tag-filters').innerHTML = ['全部',...tags].map(tag => { const active = tag === '全部' ? !query : query === tagQuery(tag); return `<button class="chip ${active ? 'active' : ''}" ${tag === '全部' ? 'data-action="clear-search"' : `data-search-tag="${escape(tag)}"`} aria-pressed="${active}">${escape(tag)}</button>`; }).join('');
 }
 function render() {
   nav(); const view = route(), titles = {discover:['每一次翻阅，都是新的发现。','实时浏览图集，挑一本慢慢翻阅。'], favorites:['收藏你的心动瞬间。','喜欢的作品，在这里重逢。'], history:['从上次停下的地方，继续。','每一段阅读，都值得被记住。'], library:['属于你的，图像世界。','搜索源站图集，寻找下一次灵感。']};
-  $('#main').innerHTML = `<div class="heading-row"><div><div class="eyebrow">${view === 'discover' ? 'A QUIET SPACE FOR YOUR INSPIRATION' : 'YOUR PERSONAL COLLECTION'}</div><h1>${titles[view][0]}</h1><p class="intro">${titles[view][1]}</p></div><span class="date-note">A little escape, a new perspective.</span></div><div id="hero"></div><section aria-label="图集列表"><div class="section-heading"><h2>${view === 'discover' ? '最新图集' : names[view]}<small id="result-count"></small></h2><div class="view-options"><select id="sort" aria-label="图集排序"><option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${listMode}">${listMode ? '▦' : '☷'}</button></div></div><div class="toolbar"><div id="tag-filters" class="chips"></div><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="${['favorites','history'].includes(view) ? '搜索当前列表' : '搜索 E-Hentai 图集或粘贴图集链接'}" value="${escape(query)}" aria-label="搜索图集"></label></div><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集与图片实时从 E-Hentai 获取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
+  $('#main').innerHTML = `<div class="heading-row"><div><div class="eyebrow">${view === 'discover' ? 'A QUIET SPACE FOR YOUR INSPIRATION' : 'YOUR PERSONAL COLLECTION'}</div><h1>${titles[view][0]}</h1><p class="intro">${titles[view][1]}</p></div><span class="date-note">A little escape, a new perspective.</span></div><div id="hero"></div><section aria-label="图集列表"><div class="section-heading"><h2>${view === 'discover' ? '最新图集' : names[view]}<small id="result-count"></small></h2><div class="view-options"><button class="category-button" data-action="settings" aria-label="设置全局分类">分类 · ${state.categories.length === categories.length ? '全部' : state.categories.length}</button><select id="sort" aria-label="图集排序"><option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${listMode}">${listMode ? '▦' : '☷'}</button></div></div><div class="toolbar"><div id="tag-filters" class="chips"></div><label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="${['favorites','history'].includes(view) ? '搜索当前列表' : '搜索 E-Hentai 图集或粘贴图集链接'}" value="${escape(query)}" aria-label="搜索图集"></label></div><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集与图片实时从 E-Hentai 获取。收藏、阅读进度与设置仅保存在当前设备。</div>`;
   $('#sort').value = sort; renderHero(); renderResults();
 }
 async function loadGalleries(append=false) {
   const request = ++listRequest, view = route(), cursor = append ? nextCursor : null;
   isLoading = true; listError = '';
   if (!append) { galleries = []; nextCursor = null; renderHero(); }
+  if (!state.categories.length) { isLoading = false; nextCursor = null; renderResults(); return; }
   renderResults();
   try {
     let data;
@@ -95,7 +98,7 @@ async function loadGalleries(append=false) {
       const match = query.trim().match(/^https:\/\/e-hentai\.org\/g\/(\d+)\/([a-f0-9]+)\/?$/);
       if (match) data = {galleries:[await getGallery(match[1],match[2])],next:null};
       else {
-        const listing = await requestJSON(`/api/galleries?${new URLSearchParams({q:query,next:cursor || ''})}`);
+        const listing = await requestJSON(`/api/galleries?${new URLSearchParams({q:query,next:cursor || '',f_cats:String(excludedCategories(state.categories))})}`);
         data = {galleries:await metadata(listing.ids),next:listing.next};
       }
     }
@@ -108,7 +111,7 @@ async function loadGalleries(append=false) {
 }
 function detail(id) {
   const g = knownGalleries.get(id); if (!g) return;
-  $('#detail-body').innerHTML = `<div class="dialog-header"><h2>图集详情</h2><button class="icon-button" data-action="close-detail" aria-label="关闭详情">✕</button></div><div class="detail-layout"><img class="detail-cover" src="${escape(imageFor(g))}" alt="${escape(g.title)}"><div class="detail-info"><span class="eyebrow">E-HENTAI / ${escape(g.category)}</span><h2>${escape(g.title)}</h2><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div><p>${escape(g.description)}</p><div class="detail-meta">上传者 / ${escape(g.creator)}<br>页数 / ${pageCount(g)} P<br>来源 / E-Hentai<br>更新 / ${escape(g.date)}${state.progress[g.id] ? `<br>上次读到 / 第 ${progressFor(g)+1} 页` : ''}</div></div><div class="detail-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? '继续阅读' : '开始阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div></div>`;
+  $('#detail-body').innerHTML = `<div class="dialog-header"><h2>图集详情</h2><button class="icon-button" data-action="close-detail" aria-label="关闭详情">✕</button></div><div class="detail-layout"><img class="detail-cover" src="${escape(imageFor(g))}" alt="${escape(g.title)}"><div class="detail-info"><span class="eyebrow">E-HENTAI / ${escape(g.category)}</span><h2>${escape(g.title)}</h2><p class="tag-help">点击标签，查找相关图集</p><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div><p>${escape(g.description)}</p><div class="detail-meta">上传者 / ${escape(g.creator)}<br>页数 / ${pageCount(g)} P<br>来源 / E-Hentai<br>更新 / ${escape(g.date)}${state.progress[g.id] ? `<br>上次读到 / 第 ${progressFor(g)+1} 页` : ''}</div></div><div class="detail-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? '继续阅读' : '开始阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${state.favorites.includes(g.id)}">${state.favorites.includes(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div></div>`;
   $('#detail-dialog').showModal();
 }
 function record() { if (!activeGallery) return; state.progress[activeGallery.id] = {page:currentPage, time:Date.now()}; save(); updateCounter(); }
@@ -168,7 +171,33 @@ function goPage(page) {
   if (readerMode === 'scroll') { const img = $('#reader-content').querySelector(`[data-page="${currentPage}"]`); $('#reader-content').scrollTo({top:img.offsetTop,behavior:'instant'}); record(); }
   else renderReader();
 }
+function searchTag(tag) {
+  const search = tagQuery(tag);
+  $('#detail-dialog').close();
+  clearTimeout(renderTimer);
+  if (location.hash === '#library') { query = search; render(); loadGalleries(); }
+  else { pendingSearch = search; location.hash = 'library'; }
+}
+function categoryCount() {
+  const count = $('#category-options').querySelectorAll('input:checked').length;
+  $('#category-count').textContent = `已选 ${count} / ${categories.length} 类`;
+}
+function selectCategories(all) {
+  $('#category-options').querySelectorAll('input').forEach(input => { input.checked = all; });
+  categoryCount();
+}
+function applyCategories() {
+  const selected = [...$('#category-options').querySelectorAll('input:checked')].map(input => input.value);
+  const changed = selected.join('|') !== state.categories.join('|');
+  state.categories = selected; save(); $('#settings-dialog').close();
+  if (changed && !activeGallery && !location.hash.startsWith('#read/')) {
+    clearTimeout(renderTimer); render(); loadGalleries();
+  }
+  toast('已应用全局分类');
+}
 function settings() {
+  $('#category-options').innerHTML = categories.map(category => `<label class="category-option"><input type="checkbox" name="category" value="${escape(category.name)}" ${state.categories.includes(category.name) ? 'checked' : ''}><span>${escape(category.name)}<small>${escape(category.label)}</small></span></label>`).join('');
+  categoryCount();
   $('#mode-setting').value = state.mode; $('#direction-setting').value = state.direction; $('#theme-setting').value = state.theme;
   $('#source-info').textContent = '搜索、图集信息和阅读图片均实时从 E-Hentai 获取。收藏和历史记录重新打开时会请求最新图集信息；离线时只能打开应用界面。';
   $('#settings-dialog').showModal();
@@ -178,8 +207,10 @@ document.addEventListener('click', event => {
   if (button.dataset.open) return detail(button.dataset.open);
   if (button.dataset.favorite) return favorite(button.dataset.favorite);
   if (button.dataset.read) { returnRoute = route(); location.hash = `read/${button.dataset.read}`; return; }
-  if (button.dataset.tag) { filter = button.dataset.tag; $('#detail-dialog').close(); renderHero(); renderResults(); return; }
+  if (button.dataset.searchTag) return searchTag(button.dataset.searchTag);
   const actions = {
+    'select-all-categories':() => selectCategories(true), 'clear-categories':() => selectCategories(false), 'apply-categories':applyCategories,
+    'clear-search':() => { query = ''; clearTimeout(renderTimer); render(); if (!['favorites','history'].includes(route())) loadGalleries(); },
     'load-more':() => loadGalleries(true), 'retry-list':() => loadGalleries(), 'retry-reader':() => openReader(location.hash.slice(6)),
     theme:() => { state.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; save(); theme(); },
     settings, 'close-settings':() => $('#settings-dialog').close(), 'close-detail':() => $('#detail-dialog').close(),
@@ -189,12 +220,13 @@ document.addEventListener('click', event => {
   }; actions[button.dataset.action]?.();
 });
 document.addEventListener('input', event => {
-  if (event.target.id === 'search') { query = event.target.value; filter = '全部'; clearTimeout(renderTimer);
+  if (event.target.id === 'search') { query = event.target.value; clearTimeout(renderTimer);
     if (['favorites','history'].includes(route())) renderResults();
     else { ++listRequest; renderTimer = setTimeout(() => loadGalleries(),450); } }
   if (event.target.id === 'page-slider') goPage(Number(event.target.value)-1);
 });
 document.addEventListener('change', event => {
+  if (event.target.name === 'category') categoryCount();
   const id = event.target.id;
   if (id === 'sort') { sort = event.target.value; renderResults(); }
   if (['mode-setting','direction-setting','theme-setting'].includes(id)) { state[id.split('-')[0]] = event.target.value; save(); theme(); }
@@ -220,7 +252,7 @@ $('#reader-content').addEventListener('click', event => {
 });
 window.addEventListener('hashchange', () => {
   if (location.hash.startsWith('#read/')) openReader(location.hash.slice(6));
-  else { ++readerRequest; clearTimeout(renderTimer); if (activeGallery) exitReader(); filter = '全部'; query = ''; render(); loadGalleries(); window.scrollTo(0,0); }
+  else { ++readerRequest; clearTimeout(renderTimer); if (activeGallery) exitReader(); query = pendingSearch ?? ''; pendingSearch = null; render(); loadGalleries(); window.scrollTo(0,0); }
 });
 function connectivity() { $('#network').textContent = navigator.onLine ? '实时图集' : '网络已断开'; $('#network').classList.toggle('offline',!navigator.onLine); }
 window.addEventListener('online',connectivity); window.addEventListener('offline',connectivity); connectivity();
