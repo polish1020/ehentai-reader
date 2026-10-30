@@ -5,7 +5,7 @@ const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 export class PhotoViewer {
   constructor(root,callbacks) {
     this.root=root;this.callbacks=callbacks;this.index=0;this.gallery=null;
-    root.innerHTML='<header class="photo-header"><button class="photo-back" data-photo-action="back" aria-label="返回图集">‹</button><div><b class="photo-title"></b><small class="photo-count"></small></div><button class="photo-reading" data-photo-action="continuous" aria-label="切换上下连续阅读">连续</button><button class="photo-expand" data-photo-action="fullscreen" aria-label="全屏查看">⛶</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div></footer><span class="photo-dismiss-hint">轻点或向下滑动退出全屏</span>';
+    root.innerHTML='<header class="photo-header"><button class="photo-back" data-photo-action="back" aria-label="返回图集">‹</button><div><b class="photo-title"></b><small class="photo-count"></small></div><button class="photo-reading" data-photo-action="continuous" aria-label="切换上下连续阅读">连续</button><button class="photo-expand" data-photo-action="fullscreen" aria-label="全屏查看">⛶</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 下滑返回图集</span>';
     this.track=root.querySelector('.photo-track');this.strip=root.querySelector('.photo-strip');
     root.addEventListener('click',event=>{
       const thumbnail=event.target.closest('[data-photo-index]');
@@ -37,7 +37,7 @@ export class PhotoViewer {
       if(event.pointerType==='mouse')this.track.style.scrollBehavior='auto';
     });
     this.track.addEventListener('pointermove',event=>{
-      if(this.drag && this.immersive){
+      if(this.drag){
         const dx=event.clientX-this.drag.x,dy=event.clientY-this.drag.y;
         if(dy>5 && dy>Math.abs(dx)*1.3 && (window.visualViewport?.scale || 1)<=1.05){
           this.track.style.transition='none';this.track.style.transform=`translateY(${dy}px) scale(${Math.max(.82,1-dy/(this.root.clientHeight*3))})`;return;
@@ -51,7 +51,7 @@ export class PhotoViewer {
       this.track.style.scrollBehavior='';
       this.resetDrag();
       if(Math.abs(dx)>10 || Math.abs(dy)>10)this.ignoreClickUntil=Date.now()+250;
-      if(this.immersive && dy>80 && dy>Math.abs(dx)*1.3 && (window.visualViewport?.scale || 1)<=1.05)return callbacks.back();
+      if(dy>80 && dy>Math.abs(dx)*1.3 && (window.visualViewport?.scale || 1)<=1.05)return callbacks.dismiss();
       if(type==='mouse' && Math.abs(dx)>5)this.go(Math.round(this.track.scrollLeft/this.track.clientWidth));
     });
     this.track.addEventListener('pointercancel',()=>{this.drag=null;this.track.style.scrollBehavior='';this.resetDrag();});

@@ -3,7 +3,10 @@ import {verifyExSession,json,apiError} from '../lib/ehentai.mjs';
 
 export function GET(request) {
   const session=readSession(request);
-  return json({configured:!!session?.scope,scope:session?.scope || null});
+  if (!session?.scope) return json({configured:false,scope:null});
+  // Upgrade existing session cookies and renew persistence without rotating private caches.
+  const saved=sessionCookie(session.credentials,session.scope);
+  return Response.json({configured:true,scope:saved.scope},{headers:{'Cache-Control':'no-store','Set-Cookie':saved.cookie}});
 }
 export async function POST(request) {
   try {

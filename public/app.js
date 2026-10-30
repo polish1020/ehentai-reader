@@ -20,6 +20,7 @@ state.theme = ['light','dark','system'].includes(state.theme) ? state.theme : 's
 state.categories = Array.isArray(state.categories) ? categories.map(category => category.name).filter(name => state.categories.includes(name)) : categories.map(category => category.name);
 state.source = state.source === 'exhentai' ? 'exhentai' : 'e-hentai';
 let exSession = {configured:false,scope:null}, authRequest = 0;
+let authQueue = Promise.resolve();
 const sourceName = source => source === 'exhentai' ? 'ExHentai' : 'E-Hentai';
 const knownGalleries = new Map(), thumbnailStores = new Map();
 let detailThumbnails, photoRequest = 0;
@@ -154,6 +155,14 @@ function thumbnailStore(gallery) {
 }
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
   back,
+  dismiss:()=>{
+    remember();
+    if (entry.albumSteps > 0) history.go(-entry.albumSteps);
+    else {
+      const album = makeEntry('detail',list,entry.galleryId,false);
+      history.replaceState(album,'',entryHash(album));applyNavigation();
+    }
+  },
   fullscreen:()=>{
     if (entry.screen === 'photo-full') back();
     else navigate('photo-full',list,entry.galleryId,{photoIndex:photoViewer.index});
@@ -423,6 +432,10 @@ function applyNavigation() {
 function navigate(screen,target=list,galleryId=null,{replace=false,photoIndex=0}={}) {
   remember();
   const value = makeEntry(screen,target,galleryId,replace ? !!entry?.parent : true,photoIndex);
+  if (galleryId && galleryId === entry?.galleryId && ['reader','photo','photo-full'].includes(screen)) {
+    const steps = entry.screen === 'detail' ? 0 : entry.albumSteps;
+    if (Number.isInteger(steps)) value.albumSteps = steps + (replace ? 0 : 1);
+  }
   history[replace ? 'replaceState' : 'pushState'](value,'',entryHash(value));
   applyNavigation();
 }
@@ -463,16 +476,23 @@ function sendImageContext() {
   });
 }
 async function refreshExSession() {
-  const request = ++authRequest, checked = await requestJSON('/api/ex-session');
+  const request = ++authRequest, checked = await requestExSession();
   if (request === authRequest) { exSession = checked; setExScope(exSession.scope); sendImageContext(); }
   return exSession;
+}
+function requestExSession(options) {
+  // Complete any cookie renewal before a save or deletion can change the session.
+  const request = authQueue.then(() => requestJSON('/api/ex-session',options));
+  authQueue = request.catch(() => {});
+  return request;
 }
 function updateSourceSettings() {
   const option = $('#source-setting option[value="exhentai"]');
   option.disabled = !exSession.configured;
   option.textContent = exSession.configured ? 'ExHentai' : 'ExHentai（需要凭证）';
   $('#source-setting').value = state.source;
-  if (exSession.configured) $('#ex-session-status').textContent = '凭证已验证，可以切换到 ExHentai。';
+  $('#verify-ex').textContent = exSession.configured ? '更新凭证' : '验证并保存到本机';
+  $('#ex-session-status').textContent = exSession.configured ? '凭证已保存在本机，关闭浏览器后仍可使用。可以切换到 ExHentai。' : '尚未保存凭证，请输入后验证。';
 }
 function purgeExLists() {
   for (const target of lists.lists.values()) if (target.source === 'exhentai') target.requestId = (target.requestId || 0) + 1;
@@ -489,7 +509,7 @@ function switchSource(source) {
 async function clearExSession() {
   ++authRequest;
   try {
-    await requestJSON('/api/ex-session',{method:'DELETE'});
+    await requestExSession({method:'DELETE'});
     await clearPrivateImageCaches().catch(() => {});
     navigator.serviceWorker?.controller?.postMessage({type:'clear-private-images',scope:exSession.scope});
     exSession = {configured:false,scope:null}; setExScope(null); purgeExLists();
@@ -508,11 +528,11 @@ $('#ex-credentials-form').addEventListener('submit',async event => {
   button.disabled = true; $('#ex-session-status').textContent = '正在验证 ExHentai 访问权限…';
   try {
     const values = Object.fromEntries(new FormData(form));
-    const checked = await requestJSON('/api/ex-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});
+    const checked = await requestExSession({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});
     const oldScope = exSession.scope;
     if (oldScope) await clearImageCaches(oldScope).catch(() => {});
     purgeExLists(); exSession = checked; setExScope(checked.scope); form.reset(); updateSourceSettings(); sendImageContext();
-    $('#ex-session-status').textContent = checked.refreshedIgneous ? '验证成功，已自动更新 igneous。现在可以切换到 ExHentai。' : '验证成功，现在可以切换到 ExHentai。';
+    $('#ex-session-status').textContent = checked.refreshedIgneous ? '验证成功，已自动更新 igneous 并保存到本机。关闭浏览器后仍可使用。' : '验证成功，凭证已保存到本机。关闭浏览器后仍可使用。';
     if (list.source === 'exhentai') navigate('list',lists.create(route(),list.query,'exhentai'));
   } catch (error) { $('#ex-session-status').textContent = error.message; }
   finally { button.disabled = false; }

@@ -14,6 +14,7 @@ const fixtureCookie=()=>sessionCookie(credentials).cookie.split(';')[0];
 test('ExHentai is unavailable before credentials are verified',async t => {
   t.mock.method(console,'error',() => {});
   const status=await GET(makeRequest('/api/ex-session'));
+  assert.equal(status.headers.get('set-cookie'),null);
   assert.deepEqual(await status.json(),{configured:false,scope:null});
   const response=await galleries(makeRequest('/api/galleries?source=exhentai'));
   assert.equal(response.status,401);
@@ -33,10 +34,28 @@ test('verification refreshes stale igneous and returns a private session without
   for (const [key,value] of Object.entries(credentials)) { assert.ok(!serialized.includes(key)); if (key !== 'ipb_member_id') assert.ok(!serialized.includes(value)); }
   const cookie=response.headers.get('set-cookie');
   assert.match(cookie,/HttpOnly/);assert.match(cookie,/Secure/);assert.match(cookie,/SameSite=Strict/);
+  assert.match(cookie,/Max-Age=31536000/);assert.match(cookie,/Expires=/);
   assert.match(calls[0].options.headers.Cookie,/igneous=old-fixture/);
   assert.ok(!calls[1].options.headers.Cookie.includes('igneous='));
   const status=await GET(makeRequest('/api/ex-session',{cookie:cookie.split(';')[0]}));
   assert.deepEqual(await status.json(),{configured:true,scope:data.scope});
+});
+
+test('existing session cookies become persistent without another upstream request or losing the private cache scope',async t => {
+  t.mock.method(globalThis,'fetch',async()=>{throw new Error('Session renewal must not contact the source');});
+  const legacy=fixtureCookie();
+  const before=await (await GET(makeRequest('/api/ex-session',{cookie:legacy}))).json();
+  const response=await GET(makeRequest('/api/ex-session',{cookie:legacy}));
+  const cookie=response.headers.get('set-cookie');
+  assert.match(cookie,/Max-Age=31536000/);
+  assert.equal(cookie.split(';')[0],legacy);
+  const expires=Date.parse(cookie.match(/Expires=([^;]+)/)[1]);
+  assert.ok(Math.abs(expires-Date.now()-365*24*60*60*1000)<2000);
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  assert.deepEqual(await response.json(),before);
+  const restored=await GET(makeRequest('/api/ex-session',{cookie:cookie.split(';')[0]}));
+  assert.deepEqual(await restored.json(),{configured:true,scope:before.scope});
+  assert.match(restored.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Strict/);
 });
 
 test('private credentials reach only ExHentai requests and never the public source',async t => {

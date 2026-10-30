@@ -34,13 +34,13 @@
     <section class="source-settings" aria-labelledby="source-settings-title">
       <h3 id="source-settings-title">内容源与凭证</h3>
       <label class="setting-row source-select">当前内容源<select id="source-setting"><option value="e-hentai">E-Hentai</option><option value="exhentai" disabled>ExHentai（需要凭证）</option></select></label>
-      <p class="setting-help">验证凭证后可切换到 ExHentai。凭证保存在当前浏览器的 HttpOnly 会话 Cookie 中，页面不会回显。</p>
+      <p class="setting-help">凭证验证后保存在本机浏览器，关闭后重新打开仍可使用，有效期一年，使用时自动续期。输入框留空不影响已保存凭证；清除浏览器数据或源站凭证失效后需重新输入。</p>
       <form id="ex-credentials-form" autocomplete="off">
         <label class="credential-field">ipb_member_id<input name="ipb_member_id" type="password" autocomplete="off" required></label>
         <label class="credential-field">ipb_pass_hash<input name="ipb_pass_hash" type="password" autocomplete="off" required></label>
         <label class="credential-field">ipb_session_id<input name="ipb_session_id" type="password" autocomplete="off" required></label>
         <label class="credential-field">igneous <small>选填，可自动更新</small><input name="igneous" type="password" autocomplete="off"></label>
-        <div class="source-actions"><button type="submit" class="primary-button" id="verify-ex">验证并保存</button><button type="button" class="outline-button" data-action="clear-ex-session">清除凭证</button></div>
+        <div class="source-actions"><button type="submit" class="primary-button" id="verify-ex">验证并保存到本机</button><button type="button" class="outline-button" data-action="clear-ex-session">清除凭证</button></div>
       </form>
       <p id="ex-session-status" class="setting-help" role="status">输入凭证后验证。</p>
     </section>
