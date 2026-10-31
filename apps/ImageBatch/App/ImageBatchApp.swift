@@ -4,8 +4,12 @@ import UIKit
 @main struct ImageBatchApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = DownloadStore.shared
+    @Environment(\.scenePhase) private var scenePhase
     var body: some Scene {
-        WindowGroup { ContentView().environmentObject(store) }
+        WindowGroup {
+            ContentView().environmentObject(store)
+                .onChange(of: scenePhase) { _, phase in if phase == .background { store.persist() } }
+        }
     }
 }
 

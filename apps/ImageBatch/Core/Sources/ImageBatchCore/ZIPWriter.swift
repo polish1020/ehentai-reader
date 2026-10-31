@@ -17,7 +17,7 @@ public enum ZIPWriter {
         public var name: String
         public init(url: URL, name: String) { self.url = url; self.name = name }
     }
-    private struct Record { var name: Data; var size: UInt32; var crc: UInt32; var offset: UInt32 }
+    private struct Record { var name: Data; var extra: Data; var size: UInt32; var crc: UInt32; var offset: UInt32 }
     private static let table: [UInt32] = (0..<256).map { value in
         var crc = UInt32(value)
         for _ in 0..<8 { crc = crc & 1 == 1 ? (crc >> 1) ^ 0xedb88320 : crc >> 1 }
@@ -48,12 +48,18 @@ public enum ZIPWriter {
                 guard size <= UInt64(UInt32.max) else { throw ZIPError.tooLarge }
                 for byte in chunk { crc = table[Int((crc ^ UInt32(byte)) & 0xff)] ^ (crc >> 8) }
             }
-            let record = Record(name: name, size: UInt32(size), crc: crc ^ 0xffffffff, offset: UInt32(try output.offset()))
+            // Include the Info-ZIP Unicode Path field as well as the UTF-8 flag
+            // for readers which still interpret the legacy name as a code page.
+            var nameCRC: UInt32 = 0xffffffff
+            for byte in name { nameCRC = table[Int((nameCRC ^ UInt32(byte)) & 0xff)] ^ (nameCRC >> 8) }
+            var extra = Data(); extra.le(UInt16(0x7075)); extra.le(UInt16(5 + name.count))
+            extra.append(1); extra.le(nameCRC ^ 0xffffffff); extra.append(name)
+            let record = Record(name: name, extra: extra, size: UInt32(size), crc: crc ^ 0xffffffff, offset: UInt32(try output.offset()))
             var header = Data()
             header.le(UInt32(0x04034b50)); header.le(UInt16(20)); header.le(UInt16(0x0800))
             header.le(UInt16(0)); header.le(UInt16(0)); header.le(UInt16(0x0021))
             header.le(record.crc); header.le(record.size); header.le(record.size)
-            header.le(UInt16(name.count)); header.le(UInt16(0)); header.append(name)
+            header.le(UInt16(name.count)); header.le(UInt16(extra.count)); header.append(name); header.append(extra)
             try append(header); try input.seek(toOffset: 0)
             while let chunk = try input.read(upToCount: 65_536), !chunk.isEmpty { try append(chunk) }
             records.append(record)
@@ -64,9 +70,9 @@ public enum ZIPWriter {
             header.le(UInt32(0x02014b50)); header.le(UInt16(20)); header.le(UInt16(20)); header.le(UInt16(0x0800))
             header.le(UInt16(0)); header.le(UInt16(0)); header.le(UInt16(0x0021))
             header.le(record.crc); header.le(record.size); header.le(record.size)
-            header.le(UInt16(record.name.count)); header.le(UInt16(0)); header.le(UInt16(0))
+            header.le(UInt16(record.name.count)); header.le(UInt16(record.extra.count)); header.le(UInt16(0))
             header.le(UInt16(0)); header.le(UInt16(0)); header.le(UInt32(0)); header.le(record.offset)
-            header.append(record.name); try append(header)
+            header.append(record.name); header.append(record.extra); try append(header)
         }
         let centralSize = try output.offset() - centralStart
         var end = Data()

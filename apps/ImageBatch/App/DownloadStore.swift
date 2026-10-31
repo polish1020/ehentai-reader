@@ -70,20 +70,24 @@ import UIKit
 
     func add(_ list: ImportedList, updating id: UUID? = nil) throws {
         guard persistenceAvailable else { throw CocoaError(.fileWriteUnknown) }
-        if let id, let index = batches.firstIndex(where: { $0.id == id }) {
-            // Invalidate old callbacks before replacing the URLs.
-            let oldIDs = Set(batches[index].items.filter { $0.state != .completed }.map(\.id))
-            for itemID in oldIDs { active.removeValue(forKey: itemID)?.cancel() }
-            for i in batches[index].items.indices where oldIDs.contains(batches[index].items[i].id) {
-                batches[index].items[i].state = .cancelled
+        var next = batches
+        var oldIDs = Set<UUID>()
+        if let id, let index = next.firstIndex(where: { $0.id == id }) {
+            oldIDs = Set(next[index].items.filter { $0.state != .completed }.map(\.id))
+            for i in next[index].items.indices where oldIDs.contains(next[index].items[i].id) {
+                next[index].items[i].state = .cancelled
             }
-            batches[index].updateLinks(list)
+            next[index].updateLinks(list)
             // New identities prevent canceled transfers from overwriting replacements.
-            for i in batches[index].items.indices where oldIDs.contains(batches[index].items[i].id) && batches[index].items[i].state == .waiting {
-                batches[index].items[i].id = UUID()
+            for i in next[index].items.indices where oldIDs.contains(next[index].items[i].id) && next[index].items[i].state == .waiting {
+                next[index].items[i].id = UUID()
             }
-        } else { batches.insert(DownloadBatch(list: list), at: 0) }
-        try FileStorage.save(batches)
+        } else { next.insert(DownloadBatch(list: list), at: 0) }
+        // Commit before creating or cancelling network tasks. Failed imports
+        // cannot leave an invisible unsaved queue running in the background.
+        try FileStorage.save(next)
+        batches = next
+        for itemID in oldIDs { active.removeValue(forKey: itemID)?.cancel() }
         pump()
     }
 
@@ -180,7 +184,7 @@ import UIKit
     func persist() {
         guard persistenceAvailable else { return }
         do { try FileStorage.save(batches) }
-        catch { notice = "任务状态保存失败，请检查设备存储空间。" }
+        catch { persistenceAvailable = false; notice = "任务状态保存失败，已停止添加新下载。请检查设备存储空间后重新打开应用。" }
     }
 }
 

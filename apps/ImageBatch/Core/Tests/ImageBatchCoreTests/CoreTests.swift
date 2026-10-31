@@ -71,10 +71,12 @@ final class CoreTests: XCTestCase {
         let checkPipe = Pipe(); check.standardOutput = checkPipe; check.standardError = checkPipe
         try check.run(); _ = checkPipe.fileHandleForReading.readDataToEndOfFile(); check.waitUntilExit()
         XCTAssertEqual(check.terminationStatus, 0)
-        let extract = Process(); extract.executableURL = URL(fileURLWithPath: "/usr/bin/unzip"); extract.arguments = ["-p", zip.path, "图片.png"]
-        let pipe = Pipe(); extract.standardOutput = pipe
-        try extract.run(); let restored = pipe.fileHandleForReading.readDataToEndOfFile(); extract.waitUntilExit()
-        XCTAssertEqual(extract.terminationStatus, 0); XCTAssertEqual(restored, bytes)
+        let output = directory.appendingPathComponent("extracted")
+        let extract = Process(); extract.executableURL = URL(fileURLWithPath: "/usr/bin/ditto"); extract.arguments = ["-x", "-k", zip.path, output.path]
+        try extract.run(); extract.waitUntilExit()
+        XCTAssertEqual(extract.terminationStatus, 0)
+        XCTAssertEqual(try Data(contentsOf: output.appendingPathComponent("图片.png")), bytes)
+        XCTAssertEqual(try String(contentsOf: output.appendingPathComponent("second.webp"), encoding: .utf8), "second image fixture")
         XCTAssertThrowsError(try ZIPWriter.write([.init(url: first, name: "../bad.png")], to: directory.appendingPathComponent("bad.zip")))
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("bad.zip").path))
     }

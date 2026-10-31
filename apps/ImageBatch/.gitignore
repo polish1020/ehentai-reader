@@ -7,3 +7,4 @@ xcuserdata/
 *.xcarchive/
 .DS_Store
 Signing.xcconfig
+TestResults.xcresult/
