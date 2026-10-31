@@ -14,14 +14,7 @@ import UIKit
     private var lastProgress: [UUID: Date] = [:]
     private var persistenceAvailable = true
     private(set) lazy var session: URLSession = {
-        #if targetEnvironment(simulator)
-        // Hosted simulators do not provide a reliable nsurlsessiond background
-        // service. Exercise real HTTPS + the same delegates/queue in foreground;
-        // background relaunch and lock-screen behavior require a signed device.
-        let configuration = URLSessionConfiguration.default
-        #else
         let configuration = URLSessionConfiguration.background(withIdentifier: "imagebatch.transfers.v1")
-        #endif
         configuration.httpCookieStorage = nil; configuration.httpShouldSetCookies = false
         configuration.urlCredentialStorage = nil; configuration.urlCache = nil
         configuration.httpMaximumConnectionsPerHost = 3; configuration.waitsForConnectivity = true
