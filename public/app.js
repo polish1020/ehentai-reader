@@ -75,7 +75,6 @@ function save() {
 function toast(message) { $('#toast').textContent = message; $('#toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').hidden = true, 3500); }
 function theme() {
   document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('[data-action=theme]').innerHTML = icon(document.documentElement.classList.contains('dark')?'sun':'moon');
   $('meta[name=theme-color]').content = document.documentElement.classList.contains('dark') ? '#18221d' : '#f5f4ef';
 }
 theme();
@@ -816,7 +815,6 @@ document.addEventListener('click', event => {
     'clear-search':() => { list.query = ''; clearTimeout(renderTimer); renderTimer = null; debounceTarget = null; render(); remember(); if (!localCollection(list)) loadGalleries(); },
     'refresh-list':() => loadGalleries(), 'retry-detail':() => renderDetail(entry.galleryId),
     'load-more':() => loadGalleries(true), 'retry-list':() => loadGalleries(list.pendingAppend), 'retry-reader':() => openReader(entry.galleryId),
-    theme:() => { state.theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark'; save(); theme(); },
     'search-back':back,settings, 'close-settings':() => $('#settings-dialog').close(), 'close-detail':back,
     'exit-reader':back, 'reader-mode':() => { if (readerMode === 'scroll') navigate('photo',list,activeGallery.id,{replace:true,photoIndex:currentPage}); else { readerMode = 'scroll';state.mode = 'scroll';save();renderReader(); } },
     'reader-favorite':() => favorite(activeGallery.id), prev:() => goPage(currentPage - 1), next:() => goPage(currentPage + 1),
