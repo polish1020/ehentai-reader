@@ -323,7 +323,7 @@ final class ImportUITests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         // An original project asset, fetched directly without cookies or a proxy.
-        editor.typeText("https://raw.githubusercontent.com/polish1020/ehentai-reader/63a3203032c483cb19e308530f8fce59530e172e/apps/ImageBatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
+        editor.typeText("https://raw.githubusercontent.com/polish1020/gallery-reader/63a3203032c483cb19e308530f8fce59530e172e/apps/ImageBatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
         finishInputAndAssertImportCount("1 张图片", in: app)
         app.buttons["import-start"].tap()
         let newTask = app.staticTexts[batchName].firstMatch
@@ -347,7 +347,7 @@ final class ImportUITests: XCTestCase {
         name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (name.value as? String ?? "").count) + batchName)
         let editor = app.textViews["import-text"]
         editor.tap()
-        editor.typeText("https://raw.githubusercontent.com/polish1020/ehentai-reader/63a3203032c483cb19e308530f8fce59530e172e/apps/ImageBatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
+        editor.typeText("https://raw.githubusercontent.com/polish1020/gallery-reader/63a3203032c483cb19e308530f8fce59530e172e/apps/ImageBatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
         finishInputAndAssertImportCount("1 张图片", in: app)
         guard let saveDestination = revealSaveDestination(in: app) else { return }
         saveDestination.tap()
@@ -368,7 +368,7 @@ final class ImportUITests: XCTestCase {
 
     func testLinkReplacementContinuesOriginalTaskAfterRelaunch() {
         let app = XCUIApplication(); app.launch()
-        let asset = "https://raw.githubusercontent.com/polish1020/ehentai-reader/63a3203032c483cb19e308530f8fce59530e172e/apps/ImageBatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+        let asset = "https://raw.githubusercontent.com/polish1020/gallery-reader/63a3203032c483cb19e308530f8fce59530e172e/apps/ImageBatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
         let batchName = "Resume smoke \(UUID().uuidString)"
         app.buttons["new-download-toolbar"].tap()
         let name = app.textFields["import-name"]

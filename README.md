@@ -1,6 +1,8 @@
-# 衣境 · Gallery Reader
+# Gallery Reader
 
 适合手机、平板和桌面浏览器的图集阅读器，提供简洁的浏览、搜索与阅读体验。
+
+[在线体验](https://gallery.polishwb1020.com)
 
 ## 主要功能
 
