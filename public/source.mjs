@@ -1,3 +1,4 @@
+export const errorMessage=value=>String(value||'请求失败，请稍后重试').replace(/(?:E-Hentai|ExHentai)(?:\s+|(?=[:：]|$))/gi,'').trim()||'请求失败，请稍后重试';
 const sourceAPI='https://e-hentai.org/api.php';
 let exScope = null;
 export function setExScope(scope) { exScope = scope; }
@@ -25,9 +26,9 @@ export async function metadata(ids,source='e-hentai') {
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(source === 'exhentai' ? {ids:ids.slice(offset,offset+25)} : {method:'gdata',gidlist:ids.slice(offset,offset+25),namespace:1})
     });
-    if (!response.ok) throw new Error(`${source === 'exhentai' ? 'ExHentai' : 'E-Hentai'} 请求失败（${response.status}）`);
+    if (!response.ok) throw new Error(`图集请求失败（${response.status}）`);
     const data=await response.json();
-    if (!data.gmetadata) throw new Error(data.error || 'E-Hentai 元数据暂时不可用');
+    if (!data.gmetadata) throw new Error(errorMessage(data.error || '图集信息暂时不可用'));
     galleries.push(...data.gmetadata.filter(g => !g.error).map(g => ({
       id:`${source === 'exhentai' ? 'ex/' : ''}${g.gid}/${g.token}`,gid:Number(g.gid),token:g.token,
       title:decode(g.title),creator:g.uploader || 'Unknown',description:decode(g.title_jpn || g.title),
@@ -42,7 +43,7 @@ export async function metadata(ids,source='e-hentai') {
 
 export async function getGallery(gid,token,source='e-hentai') {
   const [gallery]=await metadata([[Number(gid),token]],source);
-  if (!gallery) throw new Error('图集已被源站移除或暂时不可用');
+  if (!gallery) throw new Error('图集已被移除或暂时不可用');
   return galleryWithPages(gallery);
 }
 

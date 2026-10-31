@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f5f4ef">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="description" content="实时图集阅读器。搜索 E-Hentai 图集，收藏优先同步源站，失败时保存在本机。">
+  <meta name="description" content="浏览、搜索和阅读图集，收藏喜欢的作品。">
   <meta name="referrer" content="no-referrer">
   <title>衣境 · Gallery Reader</title>
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
@@ -25,7 +25,7 @@
   <div class="shell">
     <header class="topbar"><a class="mobile-brand" href="#discover">衣境<span> / GALLERY</span></a><span class="breadcrumb">在线图集 / <b id="breadcrumb">发现</b></span><div class="top-actions"><span id="network" class="connection">实时图集</span><button class="icon-button" data-feature="search" aria-label="搜索图集"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 21l-5-5M18 10.5a7.5 7.5 0 11-15 0 7.5 7.5 0 0115 0z"/></svg></button><button class="icon-button" data-action="theme" aria-label="切换深色模式">◐</button><button class="avatar" data-action="settings" aria-label="打开阅读偏好">W</button></div></header>
     <main id="main" tabindex="-1"></main>
-    <footer class="page-footer"><span>衣境 · 让阅读回归图像</span><span>实时浏览 E-Hentai 图集</span></footer>
+    <footer class="page-footer"><span>衣境 · 让阅读回归图像</span></footer>
   </div>
   <nav class="bottom-nav" id="mobile-nav" aria-label="移动主导航"></nav>
   <dialog id="detail-dialog" class="detail-dialog"><div id="detail-body"></div></dialog>
@@ -33,19 +33,18 @@
     <div class="dialog-header"><h2>阅读偏好</h2><button class="icon-button" data-action="close-settings" aria-label="关闭">✕</button></div>
     <fieldset class="category-settings">
       <legend>全局筛选分类</legend>
-      <p class="setting-help">使用 E-Hentai 顶级分类，可多选。应用于发现、搜索、收藏和足迹，保存在当前浏览器。</p>
+      <p class="setting-help">选择要显示的分类，可多选。</p>
       <div class="category-controls"><button class="text-button" data-action="select-all-categories">全选</button><button class="text-button" data-action="clear-categories">清空</button></div>
       <div id="category-options" class="category-options"></div>
       <div class="category-apply"><span id="category-count" role="status"></span><button class="primary-button" data-action="apply-categories">应用分类</button></div>
     </fieldset>
     <label class="setting-row">界面主题<select id="theme-setting"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label>
-    <section class="image-cache-settings" aria-labelledby="image-cache-title"><h3 id="image-cache-title">本地图片缓存</h3><p class="setting-help">阅读时预载前后各 5 张图片，已加载的封面和阅读图片优先从浏览器缓存读取。每个来源会话最多保留 200 张；ExHentai 缓存随凭证清除。</p><div class="source-actions"><div class="cache-statistics" role="status"><span id="image-cache-count">正在统计…</span><span id="image-cache-usage">正在统计占用空间…</span></div><button class="outline-button" data-action="clear-image-cache">清除图片缓存</button></div></section>
-    <details class="settings-note"><summary>使用说明与内容源</summary><div><b>在 iPhone 上使用</b><p>用 Safari 打开，点击分享按钮 →「添加到主屏幕」，即可全屏使用。收藏优先同步到源站账号，同步失败时保存在本机；阅读进度保存在当前浏览器。</p><b>关于内容源</b><p id="source-info">正在读取内容目录…</p><p>交互参考 EhPanda 与 JHentai，独立实现，未复制其源代码或素材。</p></div></details>
+    <section class="image-cache-settings" aria-labelledby="image-cache-title"><h3 id="image-cache-title">本地图片缓存</h3><p class="setting-help">缓存已查看的图片，加快再次打开。</p><div class="source-actions"><div class="cache-statistics" role="status"><span id="image-cache-count">正在统计…</span><span id="image-cache-usage">正在统计占用空间…</span></div><button class="outline-button" data-action="clear-image-cache">清除图片缓存</button></div></section>
     <button class="danger-button" data-action="clear-history">清除本机阅读记录</button>
     <section class="source-settings" aria-labelledby="source-settings-title">
       <h3 id="source-settings-title">内容源与凭证</h3>
       <label class="setting-row source-select">当前内容源<select id="source-setting"><option value="e-hentai">E-Hentai</option><option value="exhentai" disabled>ExHentai（需要凭证）</option></select></label>
-      <p class="setting-help">凭证验证后保存在本机浏览器，关闭后重新打开仍可使用，有效期一年，使用时自动续期。已保存凭证会以密码圆点回填，可直接修改后更新；清除浏览器数据或源站凭证失效后需重新输入。</p>
+      <p class="setting-help">填写并验证后可切换至 ExHentai。凭证保存在当前浏览器，可随时更新或清除。</p>
       <form id="ex-credentials-form" autocomplete="off">
         <label class="credential-field">ipb_member_id<input name="ipb_member_id" type="password" autocomplete="off" required></label>
         <label class="credential-field">ipb_pass_hash<input name="ipb_pass_hash" type="password" autocomplete="off" required></label>
