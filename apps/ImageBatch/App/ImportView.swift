@@ -28,11 +28,9 @@ struct ImportView: View {
     @State private var showFilePicker = false
     @State private var error: String?
     @State private var busy = false
+    @FocusState private var editing: Bool
+    @State private var preview: Result<ImportedList, Error>?
 
-    private var preview: Result<ImportedList, Error>? {
-        guard !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return Result { try ListImporter.parse(Data(draft.text.utf8), defaultName: draft.name) }
-    }
     private var parsed: ImportedList? { try? preview?.get() }
 
     var body: some View {
@@ -41,6 +39,7 @@ struct ImportView: View {
                 Section {
                     TextField("任务名称", text: $draft.name).accessibilityIdentifier("import-name")
                     TextEditor(text: $draft.text)
+                        .focused($editing)
                         .font(.system(.body, design: .monospaced)).autocorrectionDisabled()
                         .textInputAutocapitalization(.never).frame(minHeight: 190)
                         .accessibilityLabel("图片链接或 JSON 清单").accessibilityIdentifier("import-text")
@@ -77,6 +76,21 @@ struct ImportView: View {
                         if busy { ProgressView() } else { Text(draft.updating == nil ? "开始下载" : "更新并下载") }
                     }.disabled(parsed == nil || busy || store.isRestoring).accessibilityIdentifier("import-start")
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成输入") { editing = false }.accessibilityIdentifier("import-done-editing")
+                }
+            }
+            .task(id: draft.name + "\u{0}" + draft.text) {
+                preview = nil
+                guard !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                let text = draft.text, name = draft.name
+                let result = await Task.detached(priority: .userInitiated) {
+                    Result { try ListImporter.parse(Data(text.utf8), defaultName: name) }
+                }.value
+                guard !Task.isCancelled else { return }
+                preview = result
             }
             .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.json, .plainText]) { result in
                 do { let url = try result.get(); draft.text = try ImportFile.text(from: url); draft.name = url.deletingPathExtension().lastPathComponent; error = nil }

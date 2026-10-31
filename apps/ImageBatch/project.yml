@@ -17,8 +17,8 @@ targets:
     sources:
       - App
       - Core/Sources/ImageBatchCore
-    resources:
-      - Resources
+      - path: Resources
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.polishwb1020.imagebatch

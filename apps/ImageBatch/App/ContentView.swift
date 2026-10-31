@@ -31,7 +31,7 @@ struct ContentView: View {
             .navigationTitle("拾图")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button { showAbout = true } label: { Image(systemName: "info.circle") }.accessibilityLabel("使用说明与隐私") }
-                ToolbarItem(placement: .topBarTrailing) { Button { draft = ImportDraft() } label: { Image(systemName: "plus") }.accessibilityLabel("新建下载") }
+                ToolbarItem(placement: .topBarTrailing) { Button { draft = ImportDraft() } label: { Image(systemName: "plus") }.accessibilityLabel("新建下载").accessibilityIdentifier("new-download-toolbar") }
             }
             .navigationDestination(for: UUID.self) { BatchDetailView(batchID: $0) }
             .sheet(item: $draft) { ImportView(draft: $0).environmentObject(store) }
