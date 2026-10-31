@@ -18,7 +18,7 @@
 
 ## 构建
 
-需要 Mac、Xcode 26 或更高版本（提交 App Store 时使用 Apple 当前支持的正式版本），以及 XcodeGen。
+需要 Mac、Xcode 26 或更高版本（提交 App Store 时使用 Apple 当前支持的正式版本）。仓库已包含生成好的 `ImageBatch.xcodeproj`，可以直接打开；修改 `project.yml` 后使用 XcodeGen 重新生成。
 
 ```sh
 brew install xcodegen
@@ -44,10 +44,10 @@ cd Core
 swift test
 cd ..
 xcodebuild -project ImageBatch.xcodeproj -scheme ImageBatch \
-  -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO test
+  -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGN_IDENTITY=- test
 ```
 
-`project.yml` 是工程配置来源；`.github/workflows/image-batch-ios.yml` 自动生成工程、测试核心、编译 iPhone Release，并在可用 iPhone 模拟器上测试导入界面及一次真实 HTTPS 图片下载。测试图片是本项目自己的图标。
+`project.yml` 是工程配置来源；`.github/workflows/image-batch-ios.yml` 自动生成工程、测试核心、编译 iPhone Release，并在可用 iPhone 模拟器上测试导入界面、真实 HTTPS 图片下载、相册添加，以及替换链接后继续原任务并重启恢复。测试图片是本项目自己的图标。
 
 CI 提供未签名 IPA、模拟器应用、工程、测试结果和截图附件。未签名 IPA **不能直接安装**，可以用自己的开发者账号重新签名测试；它不包含企业证书，也不代表通过审核。模拟器应用解压后可用 `xcrun simctl install booted ImageBatch.app` 安装到已启动的模拟器。CI 不处理个人证书、不签名、不提交 App Store。
 

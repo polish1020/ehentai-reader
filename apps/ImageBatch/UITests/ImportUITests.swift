@@ -67,4 +67,37 @@ final class ImportUITests: XCTestCase {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "saved-to-photos"; attachment.lifetime = .keepAlways; add(attachment)
     }
+
+    func testLinkReplacementContinuesOriginalTaskAfterRelaunch() {
+        let app = XCUIApplication(); app.launch()
+        let asset = "https://raw.githubusercontent.com/polish1020/ehentai-reader/63a3203032c483cb19e308530f8fce59530e172e/apps/ImageBatch/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+        app.buttons["new-download-toolbar"].tap()
+        let name = app.textFields["import-name"]
+        name.tap(); name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (name.value as? String ?? "").count) + "Resume smoke")
+        let editor = app.textViews["import-text"]
+        editor.tap(); editor.typeText(asset + "?resume=first\n" + asset + ".missing.png")
+        app.buttons["import-done-editing"].tap()
+        XCTAssertTrue(app.staticTexts["2 张图片"].waitForExistence(timeout: 5))
+        app.buttons["import-start"].tap()
+        XCTAssertTrue(app.staticTexts["Resume smoke"].waitForExistence(timeout: 10))
+        app.staticTexts["Resume smoke"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["1 / 2 张已下载"].waitForExistence(timeout: 60))
+        XCTAssertTrue(app.staticTexts["· 1 张失败"].waitForExistence(timeout: 60))
+        app.buttons["任务选项"].tap(); app.buttons["导入更新链接"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        // First replacement is deliberately invalid: success requires skipping
+        // the already-saved first image, not downloading the whole list again.
+        editor.typeText(asset + ".expired.png\n" + asset + "?resume=second")
+        app.buttons["import-done-editing"].tap()
+        XCTAssertTrue(app.staticTexts["2 张图片"].waitForExistence(timeout: 5))
+        app.buttons["import-start"].tap()
+        XCTAssertTrue(app.staticTexts["2 / 2 张已下载"].waitForExistence(timeout: 60))
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.staticTexts["Resume smoke"].waitForExistence(timeout: 10))
+        app.staticTexts["Resume smoke"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["2 / 2 张已下载"].waitForExistence(timeout: 10))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "continued-after-link-update"; attachment.lifetime = .keepAlways; add(attachment)
+    }
 }
