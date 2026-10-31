@@ -33,6 +33,10 @@ struct ImportView: View {
     @State private var preview: Result<ImportedList, Error>?
     @State private var previewText = ""
     @State private var previewName = ""
+    @State private var saveKind: DestinationKind = .app
+    @State private var folderBookmark: Data?
+    @State private var folderName = ""
+    @State private var showFolderPicker = false
 
     private var parsed: ImportedList? {
         guard previewText == draft.text, previewName == draft.name else { return nil }
@@ -52,6 +56,25 @@ struct ImportView: View {
                     Button { showFilePicker = true } label: { Label("导入 TXT / JSON 文件", systemImage: "doc.badge.plus") }
                 } header: { Text(draft.updating == nil ? "添加图片链接" : "更新任务链接") }
                 footer: { Text("一行一条 HTTPS 图片直链，也支持 JSON 清单。最多 5,000 条、文件不超过 5 MB。") }
+                if draft.updating == nil {
+                    Section("保存位置") {
+                        Picker("保存到", selection: $saveKind) {
+                            Text("应用内").tag(DestinationKind.app)
+                            Text("文件目录 / iCloud Drive").tag(DestinationKind.folder)
+                            Text("系统相册").tag(DestinationKind.photos)
+                        }.accessibilityIdentifier("save-destination")
+                        if saveKind == .folder {
+                            Button { showFolderPicker = true } label: {
+                                Label(folderName.isEmpty ? "选择保存目录" : folderName, systemImage: "folder")
+                            }
+                            Text("可选择“文件”中的本机、iCloud Drive 或其他支持目录访问的文件服务。将在所选目录下为任务创建子文件夹；云端同步由系统处理。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        } else if saveKind == .photos {
+                            Text("只申请添加照片权限，不读取已有相片。WebP / AVIF 等不兼容格式会转换为静态 JPEG（最长边最多 8192 像素）；需要保留源文件时请选择文件目录。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 if let preview {
                     Section {
                         switch preview {
@@ -60,7 +83,7 @@ struct ImportView: View {
                             if list.duplicateCount > 0 { Text("已忽略 \(list.duplicateCount) 条重复链接").foregroundStyle(.secondary) }
                             Text("下载器直接连接链接中的服务器，不需要账号。链接如果需要登录或已过期，下载可能失败。")
                                 .font(.footnote).foregroundStyle(.secondary)
-                            if draft.updating != nil { Text("按清单中的文件名更新链接，保留已下载文件。未包含在新清单中的未完成项目会停止。")
+                            if draft.updating != nil { Text("优先按 id、否则按文件名更新链接；保留已完成图片和下载进度。TXT 更新时请保持原顺序，JSON 建议保留稳定 id。已下载、待保存的图片只重试保存。未包含在新清单中的未完成项目会停止。")
                                 .font(.footnote).foregroundStyle(.secondary) }
                         case .failure(let failure): Text(failure.localizedDescription).foregroundStyle(.red).accessibilityIdentifier("import-error")
                         }
@@ -78,11 +101,16 @@ struct ImportView: View {
                         let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !name.isEmpty { list.name = String(name.prefix(100)) }
                         busy = true
-                        do { try store.add(list, updating: draft.updating); dismiss() }
-                        catch { self.error = error.localizedDescription; busy = false }
+                        Task {
+                            do {
+                                if draft.updating == nil, saveKind == .photos { try await SaveDestinationWriter.authorizePhotos() }
+                                let destination = SaveDestination(kind: saveKind, bookmark: folderBookmark, label: folderName)
+                                try store.add(list, updating: draft.updating, destination: destination); dismiss()
+                            } catch { self.error = error.localizedDescription; busy = false }
+                        }
                     } label: {
                         if busy { ProgressView() } else { Text(draft.updating == nil ? "开始下载" : "更新并下载") }
-                    }.disabled(parsed == nil || busy || store.isRestoring).accessibilityIdentifier("import-start")
+                    }.disabled(parsed == nil || busy || store.isRestoring || (draft.updating == nil && saveKind == .folder && folderBookmark == nil)).accessibilityIdentifier("import-start")
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -105,6 +133,15 @@ struct ImportView: View {
             .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.json, .plainText]) { result in
                 do { let url = try result.get(); draft.text = try ImportFile.text(from: url); draft.name = url.deletingPathExtension().lastPathComponent; error = nil }
                 catch { self.error = error.localizedDescription }
+            }
+            .sheet(isPresented: $showFolderPicker) {
+                FolderPicker { result in
+                    do {
+                        let url = try result.get(); folderBookmark = try SaveDestinationWriter.bookmark(for: url)
+                        folderName = url.lastPathComponent; error = nil
+                    } catch { if (error as? CocoaError)?.code != .userCancelled { self.error = error.localizedDescription } }
+                    showFolderPicker = false
+                }
             }
         }
     }

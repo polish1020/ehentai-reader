@@ -58,6 +58,40 @@ final class CoreTests: XCTestCase {
         XCTAssertNil(TransferIdentity(taskDescription: "invalid"))
     }
 
+    func testStableIDsPreserveCompletedImagesWhenLinksNamesAndOrderChange() throws {
+        let initial = try ListImporter.parse(Data(#"{"items":[{"id":"a","url":"https://e.example/old-a","filename":"1.jpg"},{"id":"b","url":"https://e.example/old-b","filename":"2.jpg"}]}"#.utf8))
+        var batch = DownloadBatch(list: initial, destination: SaveDestination(kind: .photos))
+        batch.items[0].state = .completed; batch.items[0].assetIdentifier = "saved-photo"
+        batch.items[1].state = .failed; batch.items[1].received = 120
+        let identity = batch.items[1].id
+        let update = try ListImporter.parse(Data(#"{"items":[{"id":"b","url":"https://e.example/new-b","filename":"renamed.jpg"},{"id":"a","url":"https://e.example/new-a","filename":"changed.jpg"}]}"#.utf8))
+        XCTAssertEqual(batch.updateLinks(update), 1)
+        XCTAssertEqual(batch.items.count, 2)
+        XCTAssertEqual(batch.items[0].state, .completed)
+        XCTAssertEqual(batch.items[0].assetIdentifier, "saved-photo")
+        XCTAssertEqual(batch.items[0].url.absoluteString, "https://e.example/old-a")
+        XCTAssertEqual(batch.items[1].id, identity)
+        XCTAssertEqual(batch.items[1].url.absoluteString, "https://e.example/new-b")
+        XCTAssertEqual(batch.items[1].received, 120)
+        XCTAssertEqual(batch.destination.kind, .photos)
+        XCTAssertThrowsError(try ListImporter.parse(Data(#"{"items":[{"id":"same","url":"https://e.example/1"},{"id":"same","url":"https://e.example/2"}]}"#.utf8)))
+    }
+
+    func testSavingItemsAreNotInterruptedByLinkUpdatesAndLegacyStateLoads() throws {
+        var batch = DownloadBatch(list: try ListImporter.parse(Data("https://e.example/one.jpg".utf8)))
+        batch.items[0].state = .saving
+        XCTAssertEqual(batch.updateLinks(try ListImporter.parse(Data("https://e.example/new.jpg".utf8))), 0)
+        XCTAssertEqual(batch.items[0].state, .saving)
+        let data = try JSONEncoder().encode(batch)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "destination")
+        var items = try XCTUnwrap(legacy["items"] as? [[String: Any]])
+        items[0].removeValue(forKey: "attemptID"); legacy["items"] = items
+        let restored = try JSONDecoder().decode(DownloadBatch.self, from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertEqual(restored.destination.kind, .app)
+        XCTAssertEqual(restored.items[0].attemptID, restored.items[0].id)
+    }
+
     func testStreamingZIPCanBeReadBySystemUnzipIncludingUnicodeAndBinaryFiles() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

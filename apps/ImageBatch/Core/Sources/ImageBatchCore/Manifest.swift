@@ -1,6 +1,7 @@
 import Foundation
 
 public struct DownloadEntry: Codable, Equatable, Sendable {
+    public var id: String? = nil
     public var url: URL
     public var filename: String
 }
@@ -12,7 +13,7 @@ public struct ImportedList: Equatable, Sendable {
 }
 
 public enum ImportError: LocalizedError {
-    case empty, tooLarge, tooMany, invalidText, version, invalidURL(Int), invalidJSON
+    case empty, tooLarge, tooMany, invalidText, version, invalidURL(Int), invalidJSON, duplicateID
     public var errorDescription: String? {
         switch self {
         case .empty: return "清单中没有图片链接。"
@@ -22,6 +23,7 @@ public enum ImportError: LocalizedError {
         case .version: return "暂不支持这个清单版本。"
         case .invalidURL(let line): return "第 \(line) 条不是有效的 HTTPS 链接，或包含用户名、密码。"
         case .invalidJSON: return "JSON 格式不正确，请使用 items 数组，或直接使用链接数组。"
+        case .duplicateID: return "清单中的 id 必须唯一，且不能超过 256 字节。"
         }
     }
 }
@@ -33,6 +35,7 @@ public enum ListImporter {
         var items: [Item]
     }
     private struct Item: Decodable {
+        var id: String? = nil
         var url: String
         var filename: String?
     }
@@ -63,7 +66,7 @@ public enum ListImporter {
                 .filter { !$0.isEmpty && !$0.hasPrefix("#") }.map { Item(url: $0, filename: nil) }
         }
         guard raw.count <= 5_000 else { throw ImportError.tooMany }
-        var seen = Set<String>(), filenames = Set<String>(), items: [DownloadEntry] = []
+        var seen = Set<String>(), filenames = Set<String>(), identifiers = Set<String>(), items: [DownloadEntry] = []
         for (index, item) in raw.enumerated() {
             let value = item.url.trimmingCharacters(in: .whitespacesAndNewlines)
             guard var parts = URLComponents(string: value), parts.scheme?.lowercased() == "https",
@@ -74,6 +77,10 @@ public enum ListImporter {
             guard let url = parts.url else { throw ImportError.invalidURL(index + 1) }
             // Keep signed paths and query strings intact.
             guard seen.insert(url.absoluteString).inserted else { continue }
+            let identifier = item.id?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let identifier, !identifier.isEmpty {
+                guard identifier.utf8.count <= 256, identifiers.insert(identifier).inserted else { throw ImportError.duplicateID }
+            }
             let fallback = String(format: "%04d", items.count + 1) + "." + imageExtension(url.pathExtension)
             let requested = item.filename?.isEmpty == false ? item.filename! : fallback
             let safe = safeFilename(requested)
@@ -83,7 +90,7 @@ public enum ListImporter {
             while !filenames.insert(candidate.precomposedStringWithCanonicalMapping.lowercased()).inserted {
                 candidate = stem + "-\(suffix)" + (ext.isEmpty ? "" : "." + ext); suffix += 1
             }
-            items.append(DownloadEntry(url: url, filename: candidate))
+            items.append(DownloadEntry(id: identifier?.isEmpty == false ? identifier : nil, url: url, filename: candidate))
         }
         guard !items.isEmpty else { throw ImportError.empty }
         return ImportedList(name: String(name.prefix(100)), items: items, duplicateCount: raw.count - items.count)

@@ -57,10 +57,10 @@ enum FileStorage {
         if (name as NSString).pathExtension.lowercased() == "img", let ext {
             name = (name as NSString).deletingPathExtension + "." + ext
         }
-        let directory = folder(identity.batchID).appendingPathComponent(identity.itemID.uuidString, isDirectory: true)
+        let directory = folder(identity.batchID).appendingPathComponent(identity.attemptID.uuidString, isDirectory: true)
         try manager.createDirectory(at: directory, withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-        let destination = file(batchID: identity.batchID, itemID: identity.itemID, filename: name)
+        let destination = file(batchID: identity.batchID, itemID: identity.attemptID, filename: name)
         if manager.fileExists(atPath: destination.path) { try manager.removeItem(at: destination) }
         try manager.moveItem(at: temporaryURL, to: destination)
         try manager.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
@@ -74,12 +74,31 @@ enum FileStorage {
         return (name, size)
     }
 
+    static func recordDelivery(_ result: DeliveryResult, batchID: UUID, item: DownloadItem) throws {
+        let directory = folder(batchID).appendingPathComponent(item.attemptID.uuidString, isDirectory: true)
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(result).write(to: directory.appendingPathComponent(".delivered.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    static func delivered(batchID: UUID, item: DownloadItem) -> DeliveryResult? {
+        let receipt = folder(batchID).appendingPathComponent(item.attemptID.uuidString).appendingPathComponent(".delivered.json")
+        guard let data = try? Data(contentsOf: receipt) else { return nil }
+        guard let result = try? JSONDecoder().decode(DeliveryResult.self, from: data),
+              result.filename == ListImporter.safeFilename(result.filename) else { return nil }
+        return result
+    }
+    static func removeStagedImage(batchID: UUID, item: DownloadItem) {
+        if let (name, _) = recovered(batchID: batchID, item: item) {
+            try? manager.removeItem(at: file(batchID: batchID, itemID: item.attemptID, filename: name))
+        }
+        try? manager.removeItem(at: folder(batchID).appendingPathComponent(item.attemptID.uuidString).appendingPathComponent(".completed.json"))
+    }
+
     static func recovered(batchID: UUID, item: DownloadItem) -> (String, Int64)? {
-        let directory = folder(batchID).appendingPathComponent(item.id.uuidString, isDirectory: true)
+        let directory = folder(batchID).appendingPathComponent(item.attemptID.uuidString, isDirectory: true)
         guard let data = try? Data(contentsOf: directory.appendingPathComponent(".completed.json")),
               let receipt = try? JSONDecoder().decode(Receipt.self, from: data),
               receipt.filename == ListImporter.safeFilename(receipt.filename) else { return nil }
-        let destination = file(batchID: batchID, itemID: item.id, filename: receipt.filename)
+        let destination = file(batchID: batchID, itemID: item.attemptID, filename: receipt.filename)
         guard let attributes = try? manager.attributesOfItem(atPath: destination.path),
               let count = attributes[.size] as? NSNumber, count.int64Value == receipt.bytes,
               receipt.bytes > 0 else { return nil }

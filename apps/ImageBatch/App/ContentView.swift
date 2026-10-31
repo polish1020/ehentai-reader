@@ -61,6 +61,8 @@ private struct BatchRow: View {
                 Text("\(batch.completedCount) / \(batch.items.count) 张已下载")
                 if batch.failedCount > 0 { Text("· \(batch.failedCount) 张失败").foregroundStyle(.orange) }
             }.font(.caption).foregroundStyle(.secondary)
+            Text(batch.destination.kind == .photos ? "保存到相册" : batch.destination.kind == .folder ? "保存到目录 · \(batch.destination.label ?? "所选目录")" : "保存在应用内")
+                .font(.caption2).foregroundStyle(.secondary)
             ProgressView(value: Double(batch.completedCount), total: Double(max(1, batch.items.count))).tint(.teal)
         }.padding(.vertical, 7)
     }
@@ -100,7 +102,18 @@ struct BatchDetailView: View {
                                     }
                                     Spacer(minLength: 0)
                                     if item.state == .completed {
-                                        ShareLink(item: store.fileURL(batchID: batchID, item: item)) { Image(systemName: "square.and.arrow.up") }.accessibilityLabel("分享 \(item.filename)")
+                                        if batch.destination.kind == .app {
+                                            ShareLink(item: store.fileURL(batchID: batchID, item: item)) { Image(systemName: "square.and.arrow.up") }.accessibilityLabel("分享 \(item.filename)")
+                                        } else if batch.destination.kind == .folder {
+                                            Button {
+                                                exporting = true
+                                                Task {
+                                                    do { share = SharePayload(urls: [try await store.export(batchID, itemID: item.id)]) }
+                                                    catch { store.notice = error.localizedDescription }
+                                                    exporting = false
+                                                }
+                                            } label: { Image(systemName: "square.and.arrow.up") }.buttonStyle(.borderless).disabled(exporting).accessibilityLabel("分享 \(item.filename)")
+                                        }
                                     } else if item.state == .failed || item.state == .cancelled {
                                         Button { store.retry(batchID, itemID: item.id) } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless).accessibilityLabel("重试 \(item.filename)")
                                     }
@@ -108,8 +121,10 @@ struct BatchDetailView: View {
                                 if item.state == .downloading {
                                     if item.expected > 0 { ProgressView(value: Double(item.received), total: Double(max(item.received, item.expected))) }
                                     Text("正在下载 · \(ByteCountFormatter.string(fromByteCount: item.received, countStyle: .file))").font(.caption).foregroundStyle(.secondary)
+                                } else if item.state == .saving {
+                                    HStack { ProgressView().controlSize(.small); Text("正在保存到目标位置…").font(.caption).foregroundStyle(.secondary) }
                                 } else if let error = item.error { Text(error).font(.caption).foregroundStyle(.red) }
-                                else { Text(label(item.state)).font(.caption).foregroundStyle(.secondary) }
+                                else { Text(item.state == .completed && batch.destination.kind == .photos ? "已存入相册" : item.state == .completed && batch.destination.kind == .folder ? "已保存到所选目录" : label(item.state)).font(.caption).foregroundStyle(.secondary) }
                             }.padding(.vertical, 5)
                         }
                     }
@@ -127,8 +142,8 @@ struct BatchDetailView: View {
                                         catch { store.notice = error.localizedDescription }
                                         exporting = false
                                     }
-                                } label: { Label("导出已下载图片 ZIP", systemImage: "doc.zipper") }.disabled(batch.completedCount == 0)
-                                Button(role: .destructive) { confirmDelete = true } label: { Label("删除任务和文件", systemImage: "trash") }
+                                } label: { Label("导出已下载图片 ZIP", systemImage: "doc.zipper") }.disabled(batch.completedCount == 0 || batch.destination.kind == .photos)
+                                Button(role: .destructive) { confirmDelete = true } label: { Label("移除任务", systemImage: "trash") }
                             } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("任务选项")
                         }
                     }
@@ -137,18 +152,18 @@ struct BatchDetailView: View {
         }
         .sheet(item: $draft) { ImportView(draft: $0).environmentObject(store) }
         .sheet(item: $share) { ActivityView(urls: $0.urls) }
-        .confirmationDialog("删除任务和已下载文件？", isPresented: $confirmDelete, titleVisibility: .visible) {
+        .confirmationDialog(batch?.destination.kind == .app ? "删除任务和应用内图片？" : "移除任务和临时文件？已保存到外部目录或相册的图片会保留。", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("删除", role: .destructive) { store.delete(batchID); if !store.batches.contains(where: { $0.id == batchID }) { dismiss() } }
         }
     }
     private func symbol(_ state: ItemState) -> String {
-        switch state { case .waiting: return "clock"; case .downloading: return "arrow.down.circle"; case .completed: return "checkmark.circle.fill"; case .failed: return "exclamationmark.circle"; case .cancelled: return "stop.circle" }
+        switch state { case .waiting: return "clock"; case .downloading: return "arrow.down.circle"; case .saving: return "square.and.arrow.down"; case .completed: return "checkmark.circle.fill"; case .failed: return "exclamationmark.circle"; case .cancelled: return "stop.circle" }
     }
     private func color(_ state: ItemState) -> Color {
         switch state { case .completed: return .teal; case .failed: return .orange; default: return .secondary }
     }
     private func label(_ state: ItemState) -> String {
-        switch state { case .waiting: return "等待下载"; case .downloading: return "正在下载"; case .completed: return "已保存到本机"; case .failed: return "下载失败"; case .cancelled: return "已停止" }
+        switch state { case .waiting: return "等待下载"; case .downloading: return "正在下载"; case .saving: return "正在保存"; case .completed: return "已保存到本机"; case .failed: return "下载失败"; case .cancelled: return "已停止" }
     }
 }
 
@@ -167,15 +182,15 @@ private struct AboutView: View {
             Form {
                 Section("如何使用") {
                     Text("新建任务后粘贴链接，或通过“文件”App 选择 TXT / JSON 清单并用拾图打开。下载完成后，可分享单张图片或将已下载图片导出为 ZIP。")
-                    Text("链接有时效时，请尽快下载。可在任务菜单导入新清单，按文件名更新未完成项目。后台下载由 iOS 调度；强制退出 App、网络中断或链接过期可能使任务停止。")
+                    Text("链接有时效时，请尽快下载。可在任务菜单导入新清单，优先按 id、否则按文件名更新未完成项目；已完成图片不会重新下载。后台下载由 iOS 调度；强制退出 App、网络中断或链接过期可能使任务停止。")
                 }
                 Section("隐私说明") {
                     Text("链接、任务记录和图片保存在本机。本应用不注册账号、不包含广告或分析 SDK，不向开发者服务器上传这些数据。")
                     Text("下载会直接连接你提供的服务器，对方可以看到设备的网络地址和请求的链接。本应用不会附带浏览器 Cookie 或账号凭证。")
-                    Text("下载图片不进入 iCloud 设备备份；导入链接和任务记录可能随系统备份保存。删除任务会删除对应图片；删除 App 会移除本机应用数据。通过分享导出的副本需要你自行管理。")
+                    Text("应用内下载图片不进入 iCloud 设备备份；导入链接和任务记录可能随系统备份保存。选择 iCloud Drive 或其他文件服务时，图片由对应服务同步。移除任务只删除应用内图片和临时文件；外部目录、相册以及分享的副本需要你自行管理。")
                 }
                 Section("支持范围") {
-                    Text("支持可直接访问的 HTTPS 图片链接，不解析网页。请下载你拥有权利或获得授权的图片。服务端权限、有效期、限流和网络可达性仍然适用。")
+                    Text("支持可直接访问的 HTTPS 图片链接，不解析网页。相册模式仅请求添加照片权限，不读取已有相片；部分不兼容格式会转换为静态 JPEG，保存到目录可保留源文件。请下载你拥有权利或获得授权的图片。服务端权限、有效期、限流和网络可达性仍然适用。")
                 }
             }.navigationTitle("使用说明与隐私").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }

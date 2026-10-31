@@ -9,3 +9,5 @@ xcuserdata/
 Signing.xcconfig
 TestResults.xcresult/
 Screenshots/
+Package/
+ImageBatch-simulator.tar.gz
