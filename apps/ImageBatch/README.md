@@ -6,6 +6,7 @@
 
 - 粘贴多条链接，导入 UTF-8 TXT / JSON，通过“文件 → 分享/打开方式”导入清单。
 - 清单预览、URL 去重、安全文件名、同名文件避让；单任务最多 5,000 项、清单最大 5 MB。
+- 导入页面优先显示任务信息、清单预览和保存位置；原始 TXT / JSON 放在最后，可展开或收起。文件或分享导入时默认收起，空白手动输入时默认展开；点“完成输入”后收起。编辑框固定高度、内部滚动，收起不会丢失或截断清单内容。
 - 三个并发下载、原生进度、停止、失败重试；检查 HTTP 状态及图片格式，错误页不显示为成功。
 - URLSession 后台会话；重新打开时恢复系统中的下载任务，其他未完成任务重新排队。
 - 优先按稳定 id、否则按文件名导入更新的链接，保留已完成图片；普通网络重试不自动刷新过期直链。
@@ -29,6 +30,8 @@ open ImageBatch.xcodeproj
 
 在 Xcode 的 ImageBatch target → Signing & Capabilities 中选择你自己的 Team。临时 Bundle ID 为 `com.polishwb1020.imagebatch`，正式提交前需要决定并在账号中注册唯一标识。默认最低系统 iOS 17。
 
+真机调试前，在 Xcode → Settings → Accounts 登录自己的 Apple Account，连接并信任 iPhone，按手机提示开启开发者模式并重启。首次运行个人开发签名的应用时，可能还需要在 iPhone“设置 → 通用 → VPN 与设备管理”中信任对应开发者。Team、证书和描述文件是本机配置，不要将个人签名配置或凭证提交到仓库。完整 Xcode 的 iPhone SDK 可直接用于真机编译；运行模拟器测试还需单独安装对应的 Simulator Runtime。
+
 无需开发者账号的编译检查：
 
 ```sh
@@ -47,7 +50,14 @@ xcodebuild -project ImageBatch.xcodeproj -scheme ImageBatch \
   -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGN_IDENTITY=- test
 ```
 
-`project.yml` 是工程配置来源；`.github/workflows/image-batch-ios.yml` 自动生成工程、测试核心、编译 iPhone Release，并在可用 iPhone 模拟器上测试导入界面、真实 HTTPS 图片下载、相册添加，以及替换链接后继续原任务并重启恢复。测试图片是本项目自己的图标。
+`project.yml` 是工程配置来源；`.github/workflows/image-batch-ios.yml` 自动生成工程、测试核心、编译 iPhone Release，并在可用 iPhone 模拟器上测试导入界面、长 JSON 清单的收起/展开和完整内容保留、真实 HTTPS 图片下载、相册添加，以及替换链接后继续原任务并重启恢复。测试图片是本项目自己的图标。UI 测试通过有次数上限的表单滚动定位预览，避免长清单或已有任务将预览推到屏幕下方而误报失败；仍核对精确图片数量、下载结果和恢复状态。
+
+### 本机验证记录（2026-10-31）
+
+- iPhone Release 无签名编译、Personal Team 开发签名编译及真机安装启动成功；Core 测试 9 项通过，真机存储测试 6 项通过。
+- 真机任务记录确认：导入更新链接后已完成图片保持原链接，未完成图片使用更新链接完成下载；应用重新启动后恢复完成状态。
+- 新导入布局已安装到真机，使用者反馈手动测试正常。该反馈不等同于下方上架清单所有场景均已验收。
+- 本机 UI 自动化曾在测试运行器启动期间遇到 `RemoteXPC connection invalidated`，不能将这类运行中断记为测试通过。自动化结果以对应提交的 [ImageBatch iOS Actions](https://github.com/polish1020/ehentai-reader/actions/workflows/image-batch-ios.yml) 记录为准；锁屏、系统重启、后台唤醒、iCloud 跨设备同步和 TestFlight 等仍需单独验证。
 
 CI 提供未签名 IPA、模拟器应用、工程、测试结果和截图附件。未签名 IPA **不能直接安装**，可以用自己的开发者账号重新签名测试；它不包含企业证书，也不代表通过审核。模拟器应用解压后可用 `xcrun simctl install booted ImageBatch.app` 安装到已启动的模拟器。CI 不处理个人证书、不签名、不提交 App Store。
 

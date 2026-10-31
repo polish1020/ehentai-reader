@@ -37,10 +37,26 @@ struct ImportView: View {
     @State private var folderBookmark: Data?
     @State private var folderName = ""
     @State private var showFolderPicker = false
+    @State private var isManifestExpanded: Bool
+
+    init(draft: ImportDraft) {
+        _draft = State(initialValue: draft)
+        _isManifestExpanded = State(initialValue: draft.text.isEmpty)
+    }
 
     private var parsed: ImportedList? {
         guard previewText == draft.text, previewName == draft.name else { return nil }
         return try? preview?.get()
+    }
+
+    private func toggleManifest() {
+        if isManifestExpanded { editing = false }
+        isManifestExpanded.toggle()
+    }
+
+    private func collapseManifest() {
+        editing = false
+        isManifestExpanded = false
     }
 
     var body: some View {
@@ -63,16 +79,24 @@ struct ImportView: View {
                         }
                     }
                 }
-                Section {
+                Section("任务设置") {
                     TextField("任务名称", text: $draft.name).accessibilityIdentifier("import-name")
-                    TextEditor(text: $draft.text)
-                        .focused($editing)
-                        .font(.system(.body, design: .monospaced)).autocorrectionDisabled()
-                        .textInputAutocapitalization(.never).frame(minHeight: 190)
-                        .accessibilityLabel("图片链接或 JSON 清单").accessibilityIdentifier("import-text")
-                    Button { showFilePicker = true } label: { Label("导入 TXT / JSON 文件", systemImage: "doc.badge.plus") }
-                } header: { Text(draft.updating == nil ? "添加图片链接" : "更新任务链接") }
-                footer: { Text("一行一条 HTTPS 图片直链，也支持 JSON 清单。最多 5,000 条、文件不超过 5 MB。") }
+                }
+                if let preview {
+                    Section("清单预览") {
+                        switch preview {
+                        case .success(let list):
+                            Label("\(list.items.count) 张图片", systemImage: "photo.on.rectangle").accessibilityIdentifier("import-count")
+                            if list.duplicateCount > 0 { Text("已忽略 \(list.duplicateCount) 条重复链接").foregroundStyle(.secondary) }
+                            Text("下载器直接连接链接中的服务器，不需要账号。链接如果需要登录或已过期，下载可能失败。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                            if draft.updating != nil { Text("优先按 id、否则按文件名更新链接；保留已完成图片和下载进度。TXT 更新时请保持原顺序，JSON 建议保留稳定 id。已下载、待保存的图片只重试保存。未包含在新清单中的未完成项目会停止。")
+                                .font(.footnote).foregroundStyle(.secondary) }
+                        case .failure(let failure): Text(failure.localizedDescription).foregroundStyle(.red).accessibilityIdentifier("import-error")
+                        }
+                    }
+                }
+                if let error { Section("错误") { Text(error).foregroundStyle(.red) } }
                 if draft.updating == nil {
                     Section("保存位置") {
                         Picker("保存到", selection: $saveKind) {
@@ -92,21 +116,29 @@ struct ImportView: View {
                         }
                     }
                 }
-                if let preview {
-                    Section {
-                        switch preview {
-                        case .success(let list):
-                            Label("\(list.items.count) 张图片", systemImage: "photo.on.rectangle").accessibilityIdentifier("import-count")
-                            if list.duplicateCount > 0 { Text("已忽略 \(list.duplicateCount) 条重复链接").foregroundStyle(.secondary) }
-                            Text("下载器直接连接链接中的服务器，不需要账号。链接如果需要登录或已过期，下载可能失败。")
-                                .font(.footnote).foregroundStyle(.secondary)
-                            if draft.updating != nil { Text("优先按 id、否则按文件名更新链接；保留已完成图片和下载进度。TXT 更新时请保持原顺序，JSON 建议保留稳定 id。已下载、待保存的图片只重试保存。未包含在新清单中的未完成项目会停止。")
-                                .font(.footnote).foregroundStyle(.secondary) }
-                        case .failure(let failure): Text(failure.localizedDescription).foregroundStyle(.red).accessibilityIdentifier("import-error")
+                Section {
+                    Button(action: toggleManifest) {
+                        HStack {
+                            Text(isManifestExpanded ? "收起清单内容" : "展开清单内容")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .rotationEffect(.degrees(isManifestExpanded ? 90 : 0))
+                                .foregroundStyle(.secondary)
                         }
+                        .contentShape(Rectangle())
                     }
-                }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
+                    .accessibilityIdentifier("import-manifest-toggle")
+                    .accessibilityValue(isManifestExpanded ? "已展开" : "已收起")
+                    if isManifestExpanded {
+                        TextEditor(text: $draft.text)
+                            .focused($editing)
+                            .font(.system(.body, design: .monospaced)).autocorrectionDisabled()
+                            .textInputAutocapitalization(.never).frame(height: 200)
+                            .accessibilityLabel("图片链接或 JSON 清单").accessibilityIdentifier("import-text")
+                    }
+                    Button { showFilePicker = true } label: { Label("导入 TXT / JSON 文件", systemImage: "doc.badge.plus") }
+                } header: { Text("链接清单") }
+                footer: { Text("一行一条 HTTPS 图片直链，也支持 JSON 清单。最多 5,000 条、文件不超过 5 MB。") }
             }
             .navigationTitle(draft.updating == nil ? "新建下载" : "更新链接")
             .navigationBarTitleDisplayMode(.inline)
@@ -131,7 +163,7 @@ struct ImportView: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("完成输入") { editing = false }.accessibilityIdentifier("import-done-editing")
+                    Button("完成输入") { collapseManifest() }.accessibilityIdentifier("import-done-editing")
                 }
             }
             .task(id: draft.name + "\u{0}" + draft.text) {
@@ -148,7 +180,13 @@ struct ImportView: View {
                 if name == "图片任务", case .success(let list) = result, list.name != name { draft.name = list.name }
             }
             .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.json, .plainText]) { result in
-                do { let url = try result.get(); draft.text = try ImportFile.text(from: url); draft.name = url.deletingPathExtension().lastPathComponent; error = nil }
+                do {
+                    let url = try result.get()
+                    draft.text = try ImportFile.text(from: url)
+                    draft.name = url.deletingPathExtension().lastPathComponent
+                    error = nil
+                    collapseManifest()
+                }
                 catch { self.error = error.localizedDescription }
             }
             .sheet(isPresented: $showFolderPicker) {
