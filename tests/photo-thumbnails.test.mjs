@@ -9,12 +9,12 @@ const sprite='<div id="gdt"><a href="https://e-hentai.org/s/abcdef/1-1"><div sty
 test('source sprite sheets are cropped with their original dimensions and offsets',()=>{
   const data=parseThumbnails(sprite);
   assert.equal(data.perPage,2);
-  assert.deepEqual(data.pages[1],{index:1,src:'https://images.example/sheet.webp',width:200,height:267,x:-200,y:0,sprite:true});
+  assert.deepEqual(data.pages[1],{index:1,src:'https://images.example/sheet.webp',pageURL:'https://e-hentai.org/s/fedcba/1-2',width:200,height:267,x:-200,y:0,sprite:true});
 });
 
 test('individual thumbnails and relative source URLs are supported',()=>{
   const data=parseThumbnails('<div id="gdt"><a href="/s/abcdef/1-3"><img src="//s.exhentai.org/w/fixture.webp" width="120" height="160"></a></div>','https://exhentai.org');
-  assert.deepEqual(data.pages[0],{index:2,src:'https://s.exhentai.org/w/fixture.webp',width:120,height:160});
+  assert.deepEqual(data.pages[0],{index:2,src:'https://s.exhentai.org/w/fixture.webp',pageURL:'https://exhentai.org/s/abcdef/1-3',width:120,height:160});
 });
 
 test('visible thumbnail requests share gallery pages and only fetch needed batches',async()=>{

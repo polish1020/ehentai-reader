@@ -856,6 +856,11 @@ for(const target of lists.lists.values())for(const gallery of target.galleries)f
 
 const features = new SourceFeatures({
   request:requestJSON,toast,state,save,getList:()=>list,getScope:()=>exSession.scope,
+  exportPageLinks:async(gallery,pages,signal)=>{
+    const store=thumbnailStore(gallery),links=[];
+    for(const page of pages){signal.throwIfAborted();const thumbnail=await store.ensure(page-1);signal.throwIfAborted();if(!thumbnail?.pageURL)throw new Error('暂时无法读取图片页链接，请刷新图集后重试');links.push({page,url:thumbnail.pageURL});}
+    return links;
+  },
   ensureAccount:async()=>{await refreshExSession();return exSession.configured;},
   onFeed:feed=>{
     const target=[...lists.lists.values()].find(target=>target.source===list.source&&target.view==='discover'&&feedFor(target)===feed&&!target.query&&JSON.stringify(target.filters||{})===JSON.stringify(list.filters||{}))||lists.create('discover','',list.source);

@@ -304,3 +304,5 @@ body.searching main{padding-top:8px}
 .card-inline-rating .ui-icon{width:10px;height:10px;fill:currentColor}
 .list-mode .card-sub>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .list-mode .card-sub>span:not(:first-child){flex-shrink:0}
+.export-progress{width:100%;height:8px;accent-color:var(--green)}
+.export-failures{margin-top:16px;font-size:12px}

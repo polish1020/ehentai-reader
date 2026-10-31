@@ -1,5 +1,6 @@
 import {icon} from './icons.mjs';
 import {feeds,feedFor} from './source-options.mjs';
+import {ManifestExport,exportLimit,exportRange} from './download-manifest.mjs';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const field=(name,label,value='',type='text',extra='')=>`<label class="feature-field">${label}<input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;
 const button=(action,label,extra='')=>`<button type="button" class="outline-button" data-feature="${action}" ${extra}>${label}</button>`;
@@ -7,7 +8,7 @@ export class SourceFeatures {
   constructor(callbacks) {
     Object.assign(this,callbacks);this.groups=[];this.tags={tags:[],sets:[]};this.sequence=0;
     this.dialog=document.createElement('dialog');this.dialog.className='feature-dialog';document.body.append(this.dialog);
-    this.dialog.addEventListener('close',()=>{this.sequence++;this.dialog.replaceChildren();});
+    this.dialog.addEventListener('close',()=>{this.clearImageExport();this.sequence++;this.dialog.replaceChildren();});
     document.addEventListener('click',event=>{
       const target=event.target.closest('[data-feature]');if(!target)return;
       event.preventDefault();this.handle(target.dataset.feature,target).catch(error=>this.error(error));
@@ -37,6 +38,7 @@ export class SourceFeatures {
     root.querySelector('.gallery-summary')?.after(tools);
   }
   modal(title,body) {
+    this.clearImageExport();
     this.sequence++;
     this.dialog.innerHTML=`<div class="dialog-header"><h2>${esc(title)}</h2><button type="button" class="icon-button" data-feature="close" aria-label="关闭">${icon('close')}</button></div><div class="feature-body">${body}<p class="feature-status" role="status"></p></div>`;
     if(!this.dialog.open)this.dialog.showModal();this.dialog.scrollTop=0;
@@ -80,6 +82,10 @@ export class SourceFeatures {
     if(action==='gallery-favorite')return this.openFavorite();
     if(action==='gallery-tags')return this.openGalleryTags();
     if(action==='downloads')return this.openDownloads();
+    if(action==='image-list')return this.openImageList();
+    if(action==='image-list-cancel'){this.imageExport?.cancel();return;}
+    if(action==='image-list-fresh')return this.generateImageList(this.dialog.querySelector('form'),true);
+    if(action==='image-list-share')return this.shareImageList();
     if(action==='archive-options')return this.openArchive();
     if(action==='archive-check')return this.openArchive();
     if(action==='archive-prepare') {
@@ -130,11 +136,57 @@ export class SourceFeatures {
     this.modal('图集标签',`<form data-feature-form="tag-vote" class="feature-form"><label class="feature-field">选择标签<select name="tag">${this.gallery.tags.map(tag=>`<option>${esc(tag)}</option>`).join('')}</select></label><div class="source-actions"><button type="submit" name="vote" value="1" class="primary-button">赞同标签</button><button type="submit" name="vote" value="-1" class="outline-button">反对标签</button></div></form><p class="feature-note">标签投票会提交到源站。关注和屏蔽可在标签偏好中管理。</p>${button('tags','管理关注与屏蔽')}`);
   }
   async openDownloads() {
-    const gallery=this.gallery,sequence=this.modal('图集下载','<p class="loading">正在读取种子…</p>');
-    const result=await this.get('torrents',gallery);if(sequence!==this.sequence)return;
+    const exportButton=button('image-list',`${icon('download')}导出下载清单`);
+    const gallery=this.gallery,sequence=this.modal('图集下载',exportButton+'<p class="loading">正在读取种子…</p>');
+    let result,note='';try{result=await this.get('torrents',gallery);}catch(error){result={torrents:[]};note=error.message;}if(sequence!==this.sequence||!this.dialog.open)return;
     const page=(this.state.progress[gallery.id]?.page||0)+1;
     const image='/api/image?'+new URLSearchParams({gid:gallery.gid,token:gallery.token,page,source:gallery.source});
-    this.modal('图集下载',`<div class="source-actions"><a class="outline-button" href="${esc(image)}" target="_blank" rel="noreferrer">打开第 ${page} 张图片</a>${button('archive-options','压缩包下载')}</div><h3>种子文件</h3>${result.torrents.map(torrent=>`<article class="torrent-card"><b>${esc(torrent.title)}</b><p>${esc(torrent.info)}</p><div class="source-actions"><a class="outline-button" href="${esc(torrent.url)}" target="_blank" rel="noreferrer">下载种子</a>${torrent.magnet?`<a class="outline-button" href="${esc(torrent.magnet)}">磁力链接</a>`:''}</div></article>`).join('')||'<p class="feature-note">此图集暂无种子。</p>'}<p class="feature-note">文件由浏览器直接向源站或 CDN 下载。</p>`);
+    this.modal('图集下载',`<div class="source-actions">${exportButton}<a class="outline-button" href="${esc(image)}" target="_blank" rel="noreferrer">打开第 ${page} 张图片</a>${button('archive-options','压缩包下载')}</div><h3>种子文件</h3>${result.torrents.map(torrent=>`<article class="torrent-card"><b>${esc(torrent.title)}</b><p>${esc(torrent.info)}</p><div class="source-actions"><a class="outline-button" href="${esc(torrent.url)}" target="_blank" rel="noreferrer">下载种子</a>${torrent.magnet?`<a class="outline-button" href="${esc(torrent.magnet)}">磁力链接</a>`:''}</div></article>`).join('')||`<p class="feature-note">${esc(note||'此图集暂无种子。')}</p>`}<p class="feature-note">文件由浏览器直接向源站或 CDN 下载。</p>`);
+  }
+  clearImageExport() {
+    this.imageExport?.cancel();this.imageExport=null;
+    if(this.exportBlobURL)URL.revokeObjectURL(this.exportBlobURL);
+    this.exportBlobURL=null;this.exportFile=null;
+  }
+  openImageList() {
+    const gallery=this.gallery,scope=this.getScope();
+    const sequence=this.modal('导出下载清单',`<p class="feature-note">选择图片范围，生成可导入通用下载器的 JSON 文件。只解析图片页，不经 Vercel 传输原图；每次最多 ${exportLimit} 张。</p><form data-feature-form="image-list" class="feature-form"><div class="feature-columns">${field('start','开始页',1,'number',`min="1" max="${gallery.pageCount}" required`)}${field('end','结束页',Math.min(exportLimit,gallery.pageCount),'number',`min="1" max="${gallery.pageCount}" required`)}</div><div class="source-actions"><button class="primary-button" type="submit" data-export-run>生成清单</button>${button('image-list-cancel','停止','data-export-stop hidden')}${button('image-list-fresh','重新生成全部链接','data-export-fresh hidden')}</div></form><div data-export-result role="status" aria-live="polite"></div><p class="feature-note">H@H 直链可能约 15 分钟失效，请生成后立即导入下载器。过期后重新生成，在下载器中选择“继续已有任务”，会按稳定 id 保留已完成图片。清单不包含账号凭证。</p>`);
+    this.imageExport=new ManifestExport(gallery,{
+      request:this.request,pageLinks:this.exportPageLinks,
+      changed:()=>{if(this.dialog.open&&sequence===this.sequence&&scope===this.getScope())this.renderImageList();}
+    });
+    this.renderImageList();
+  }
+  renderImageList() {
+    const task=this.imageExport;if(!task)return;
+    const root=this.dialog,total=task.pages.length,done=task.items.size;
+    const run=root.querySelector('[data-export-run]');if(!run)return;
+    root.querySelectorAll('input').forEach(input=>{input.disabled=task.running;});
+    run.disabled=task.running;run.innerHTML=task.running?'<span class="loading-spinner" aria-hidden="true"></span>正在生成…':done&&done<total?'继续 / 重试失败项':done===total&&total?'重新生成':'生成清单';
+    root.querySelector('[data-export-stop]').hidden=!task.running;
+    root.querySelector('[data-export-fresh]').hidden=task.running||!done||done===total;
+    if(task.running){root.querySelector('[data-export-result]').innerHTML=`<p class="feature-note">已解析 ${done} / ${total} 张</p><progress class="export-progress" max="${total||1}" value="${done}"></progress>`;return;}
+    if(this.exportBlobURL)URL.revokeObjectURL(this.exportBlobURL);this.exportBlobURL=null;this.exportFile=null;
+    let actions='';
+    if(done){
+      const title=String(task.gallery.title||`gallery-${task.gallery.gid}`).replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_').slice(0,60);
+      const name=`${title}-${task.pages[0]}-${task.pages.at(-1)}${done<total?'-partial':''}.json`;
+      const blob=new Blob([JSON.stringify(task.manifest(),null,2)],{type:'application/json'});
+      this.exportFile=new File([blob],name,{type:'application/json'});this.exportBlobURL=URL.createObjectURL(blob);
+      actions=`<div class="source-actions"><a class="primary-button" href="${esc(this.exportBlobURL)}" download="${esc(name)}">${done<total?'保存已成功部分':'保存 JSON 文件'}</a>${navigator.canShare?.({files:[this.exportFile]})?button('image-list-share','分享给下载器'):''}</div>`;
+    }
+    root.querySelector('[data-export-result]').innerHTML=total?`<p class="feature-note">${done===total?'清单已生成':'尚未全部完成'} · ${done} / ${total} 张${task.failures.size?` · ${task.failures.size} 张失败`:''}</p>${actions}${task.failures.size?`<details class="export-failures"><summary>查看失败页码</summary><p class="feature-note">${[...task.failures].map(([page,error])=>`第 ${page} 页：${esc(error)}`).join('<br>')}</p></details>`:''}`:'';
+  }
+  async generateImageList(form,fresh=false) {
+    const task=this.imageExport;if(!task)return;
+    const start=form.elements.start.value,end=form.elements.end.value;
+    exportRange(start,end,task.gallery.pageCount);this.status('');
+    try{await task.run(start,end,{fresh:fresh||!!task.pages.length&&task.items.size===task.pages.length});}
+    catch(error){if(this.imageExport!==task)return;if(error.name==='AbortError')this.status('已停止，可继续生成未完成的链接');else this.error(error);}
+  }
+  async shareImageList() {
+    if(!this.exportFile)return;
+    try{await navigator.share({files:[this.exportFile]});}catch(error){if(error.name!=='AbortError')this.error(error);}
   }
   async openArchive() {
     const intent=++this.sequence;await this.account();if(intent!==this.sequence)return;const sequence=this.modal('压缩包下载','<p class="loading">正在读取压缩包选项和费用…</p>');
@@ -146,6 +198,7 @@ export class SourceFeatures {
   async submit(form,submitter) {
     const sequence=this.sequence,valid=()=>this.dialog.open&&this.sequence===sequence;
     const kind=form.dataset.featureForm,data=Object.fromEntries(new FormData(form));
+    if(kind==='image-list')return this.generateImageList(form);
     if(submitter?.name)data[submitter.name]=submitter.value;
     if(kind==='advanced') {
       const {query,...fields}=data,filters={...this.getList().filters,...fields};
