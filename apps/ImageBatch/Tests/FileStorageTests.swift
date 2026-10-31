@@ -14,6 +14,12 @@ final class FileStorageTests: XCTestCase {
         XCTAssertEqual(name, "one.png"); XCTAssertEqual(bytes, Int64(png.count))
         let destination = FileStorage.file(batchID: identity.batchID, itemID: identity.itemID, filename: name)
         XCTAssertEqual(try Data(contentsOf: destination), png)
+        var item = DownloadItem(entry: DownloadEntry(url: URL(string: "https://example.com/image")!, filename: "one.img"))
+        item.id = identity.itemID
+        XCTAssertEqual(FileStorage.recovered(batchID: identity.batchID, item: item)?.0, "one.png")
+        XCTAssertEqual(FileStorage.recovered(batchID: identity.batchID, item: item)?.1, Int64(png.count))
+        try Data().write(to: destination)
+        XCTAssertNil(FileStorage.recovered(batchID: identity.batchID, item: item))
         XCTAssertNotEqual(destination, FileStorage.file(batchID: identity.batchID, itemID: UUID(), filename: name))
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporary.path))
     }

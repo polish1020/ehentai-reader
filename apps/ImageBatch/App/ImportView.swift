@@ -10,6 +10,7 @@ struct ImportDraft: Identifiable {
 
 enum ImportFile {
     static func text(from url: URL) throws -> String {
+        guard url.isFileURL else { throw ImportError.invalidText }
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
@@ -30,8 +31,13 @@ struct ImportView: View {
     @State private var busy = false
     @FocusState private var editing: Bool
     @State private var preview: Result<ImportedList, Error>?
+    @State private var previewText = ""
+    @State private var previewName = ""
 
-    private var parsed: ImportedList? { try? preview?.get() }
+    private var parsed: ImportedList? {
+        guard previewText == draft.text, previewName == draft.name else { return nil }
+        return try? preview?.get()
+    }
 
     var body: some View {
         NavigationStack {
@@ -68,7 +74,9 @@ struct ImportView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        guard let list = parsed else { return }
+                        guard var list = parsed else { return }
+                        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !name.isEmpty { list.name = String(name.prefix(100)) }
                         busy = true
                         do { try store.add(list, updating: draft.updating); dismiss() }
                         catch { self.error = error.localizedDescription; busy = false }
@@ -90,7 +98,9 @@ struct ImportView: View {
                     Result { try ListImporter.parse(Data(text.utf8), defaultName: name) }
                 }.value
                 guard !Task.isCancelled else { return }
+                previewText = text; previewName = name
                 preview = result
+                if name == "图片任务", case .success(let list) = result, list.name != name { draft.name = list.name }
             }
             .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.json, .plainText]) { result in
                 do { let url = try result.get(); draft.text = try ImportFile.text(from: url); draft.name = url.deletingPathExtension().lastPathComponent; error = nil }

@@ -32,13 +32,21 @@ public enum ZIPWriter {
         var finished = false
         defer { if !finished { try? FileManager.default.removeItem(at: destination) } }
         var records: [Record] = []
+        var usedNames = Set<String>()
         func append(_ data: Data) throws {
             guard try output.offset() + UInt64(data.count) <= UInt64(UInt32.max) else { throw ZIPError.tooLarge }
             try output.write(contentsOf: data)
         }
         for entry in entries {
             guard entry.name == ListImporter.safeFilename(entry.name) else { throw ZIPError.invalidName }
-            let name = Data(entry.name.utf8)
+            // MIME-derived extensions can make previously distinct import names
+            // collide. Avoid silently overwriting an image when extracting.
+            var unique = entry.name, suffix = 2
+            let ext = (entry.name as NSString).pathExtension, stem = (entry.name as NSString).deletingPathExtension
+            while !usedNames.insert(unique.precomposedStringWithCanonicalMapping.lowercased()).inserted {
+                unique = stem + "-\(suffix)" + (ext.isEmpty ? "" : "." + ext); suffix += 1
+            }
+            let name = Data(unique.utf8)
             guard name.count <= Int(UInt16.max) else { throw ZIPError.invalidName }
             let input = try FileHandle(forReadingFrom: entry.url)
             defer { try? input.close() }

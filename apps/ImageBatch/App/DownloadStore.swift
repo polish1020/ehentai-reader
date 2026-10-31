@@ -54,6 +54,14 @@ import UIKit
                 for b in self.batches.indices {
                     for i in self.batches[b].items.indices {
                         let item = self.batches[b].items[i]
+                        if [.waiting, .downloading].contains(item.state), self.active[item.id] == nil,
+                           let (name, bytes) = FileStorage.recovered(batchID: self.batches[b].id, item: item) {
+                            self.batches[b].items[i].state = .completed
+                            self.batches[b].items[i].savedFilename = name
+                            self.batches[b].items[i].received = bytes; self.batches[b].items[i].expected = bytes
+                            self.batches[b].items[i].error = nil
+                            continue
+                        }
                         if item.state == .completed,
                            !FileStorage.manager.fileExists(atPath: FileStorage.file(batchID: self.batches[b].id, itemID: item.id, filename: item.savedFilename ?? item.filename).path) {
                             self.batches[b].items[i].state = .failed
@@ -153,7 +161,7 @@ import UIKit
         active.removeValue(forKey: identity.itemID); lastProgress.removeValue(forKey: identity.itemID)
         guard let (b, i) = position(identity.batchID, identity.itemID), batches[b].items[i].state == .downloading else {
             // A canceled/deleted task can finish between cancellation and its callback.
-            if let filename { try? FileStorage.manager.removeItem(at: FileStorage.file(batchID: identity.batchID, itemID: identity.itemID, filename: filename)) }
+            if filename != nil { try? FileStorage.manager.removeItem(at: FileStorage.folder(identity.batchID).appendingPathComponent(identity.itemID.uuidString)) }
             pump(); return
         }
         if let error {

@@ -3,6 +3,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 enum FileStorage {
+    private struct Receipt: Codable { var filename: String; var bytes: Int64 }
     static let manager = FileManager.default
     static var stateURL: URL { manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("ImageBatch/tasks.json") }
     static var downloadsURL: URL { manager.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads", isDirectory: true) }
@@ -66,7 +67,23 @@ enum FileStorage {
         var noBackup = destination
         var values = URLResourceValues(); values.isExcludedFromBackup = true
         try? noBackup.setResourceValues(values)
+        // The native delegate can finish while the app is suspended. Record
+        // completion beside the file before dispatching the UI/state callback.
+        let receipt = try JSONEncoder().encode(Receipt(filename: name, bytes: size))
+        try receipt.write(to: directory.appendingPathComponent(".completed.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         return (name, size)
+    }
+
+    static func recovered(batchID: UUID, item: DownloadItem) -> (String, Int64)? {
+        let directory = folder(batchID).appendingPathComponent(item.id.uuidString, isDirectory: true)
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent(".completed.json")),
+              let receipt = try? JSONDecoder().decode(Receipt.self, from: data),
+              receipt.filename == ListImporter.safeFilename(receipt.filename) else { return nil }
+        let destination = file(batchID: batchID, itemID: item.id, filename: receipt.filename)
+        guard let attributes = try? manager.attributesOfItem(atPath: destination.path),
+              let count = attributes[.size] as? NSNumber, count.int64Value == receipt.bytes,
+              receipt.bytes > 0 else { return nil }
+        return (receipt.filename, receipt.bytes)
     }
 }
 
