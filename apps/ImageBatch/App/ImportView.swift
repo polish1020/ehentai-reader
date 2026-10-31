@@ -13,10 +13,7 @@ enum ImportFile {
         guard url.isFileURL else { throw ImportError.invalidText }
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= 5 * 1024 * 1024 else { throw ImportError.tooLarge }
         let data = try Data(contentsOf: url)
-        guard data.count <= 5 * 1024 * 1024 else { throw ImportError.tooLarge }
         guard let text = String(data: data, encoding: .utf8) else { throw ImportError.invalidText }
         return text
     }
@@ -138,7 +135,7 @@ struct ImportView: View {
                     }
                     Button { showFilePicker = true } label: { Label("导入 TXT / JSON 文件", systemImage: "doc.badge.plus") }
                 } header: { Text("链接清单") }
-                footer: { Text("一行一条 HTTPS 图片直链，也支持 JSON 清单。最多 5,000 条、文件不超过 5 MB。") }
+                footer: { Text("一行一条 HTTPS 图片直链，也支持 JSON 清单。最多 5,000 条。") }
             }
             .navigationTitle(draft.updating == nil ? "新建下载" : "更新链接")
             .navigationBarTitleDisplayMode(.inline)

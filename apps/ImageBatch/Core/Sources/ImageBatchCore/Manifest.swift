@@ -13,11 +13,10 @@ public struct ImportedList: Equatable, Sendable {
 }
 
 public enum ImportError: LocalizedError {
-    case empty, tooLarge, tooMany, invalidText, version, invalidURL(Int), invalidJSON, duplicateID
+    case empty, tooMany, invalidText, version, invalidURL(Int), invalidJSON, duplicateID
     public var errorDescription: String? {
         switch self {
         case .empty: return "清单中没有图片链接。"
-        case .tooLarge: return "清单不能超过 5 MB。"
         case .tooMany: return "一个任务最多导入 5,000 条链接，请分批导入。"
         case .invalidText: return "请导入 UTF-8 编码的 TXT 或 JSON 文件。"
         case .version: return "暂不支持这个清单版本。"
@@ -41,7 +40,6 @@ public enum ListImporter {
     }
 
     public static func parse(_ data: Data, defaultName: String = "图片任务") throws -> ImportedList {
-        guard data.count <= 5 * 1024 * 1024 else { throw ImportError.tooLarge }
         guard let text = String(data: data, encoding: .utf8) else { throw ImportError.invalidText }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{feff}")))
         guard !trimmed.isEmpty else { throw ImportError.empty }

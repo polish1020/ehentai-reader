@@ -25,9 +25,24 @@ final class CoreTests: XCTestCase {
         for value in ["", "file:///etc/passwd", "http://example.com/a.jpg", "javascript:alert(1)", "https://user:password@example.com/a", "{bad}", #"{"version":2,"items":[]}"#, "https://example.com/a.jpg\nnot a URL"] {
             XCTAssertThrowsError(try ListImporter.parse(Data(value.utf8)), value)
         }
-        XCTAssertThrowsError(try ListImporter.parse(Data(repeating: 65, count: 5 * 1024 * 1024 + 1)))
         XCTAssertThrowsError(try ListImporter.parse(Data((0..<5_001).map { "https://example.com/\($0).jpg" }.joined(separator: "\n").utf8)))
         XCTAssertThrowsError(try ListImporter.parse(Data([0xff, 0xfe])))
+    }
+
+    func testManifestsLargerThanFiveMiBAreAccepted() throws {
+        let padding = String(repeating: "x", count: 5 * 1024 * 1024)
+        let url = "https://example.com/large.png"
+        let manifests = [
+            #"{"padding":"\#(padding)","items":[{"url":"\#(url)"}]}"#,
+            "#" + padding + "\n" + url
+        ]
+        for manifest in manifests {
+            let data = Data(manifest.utf8)
+            XCTAssertGreaterThan(data.count, 5 * 1024 * 1024)
+            let list = try ListImporter.parse(data)
+            XCTAssertEqual(list.items.count, 1)
+            XCTAssertEqual(list.items[0].url.absoluteString, url)
+        }
     }
 
     func testDuplicateNamesUseCaseInsensitiveCollisionHandlingAndBoundedLengths() throws {

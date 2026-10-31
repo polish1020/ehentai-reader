@@ -4,6 +4,24 @@ import XCTest
 final class FileStorageTests: XCTestCase {
     private let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5uoAAAAASUVORK5CYII=")!
 
+    func testImportFileLargerThanFiveMiBPreservesItsFullContents() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("large-manifest.json")
+        let text = #"{"items":[{"url":"https://example.com/large.png"}]}"#
+            + String(repeating: " ", count: 5 * 1024 * 1024)
+        let data = Data(text.utf8)
+        XCTAssertGreaterThan(data.count, 5 * 1024 * 1024)
+        try data.write(to: file)
+
+        let imported = try ImportFile.text(from: file)
+        XCTAssertEqual(imported, text)
+        let list = try ListImporter.parse(Data(imported.utf8))
+        XCTAssertEqual(list.items.count, 1)
+        XCTAssertEqual(list.items[0].url.absoluteString, "https://example.com/large.png")
+    }
+
     @MainActor func testSessionDoesNotUseBrowserCookiesOrStoredCredentials() {
         let configuration = DownloadStore.shared.session.configuration
         XCTAssertNil(configuration.httpCookieStorage)

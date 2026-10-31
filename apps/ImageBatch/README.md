@@ -22,7 +22,7 @@
 
 ## 导入清单
 
-TXT 每行一个 HTTPS 图片链接；JSON 格式见 [示例文件](Examples/images.json)。单任务最多 5,000 项，文件不超过 5 MB。
+TXT 每行一个 HTTPS 图片链接；JSON 格式见 [示例文件](Examples/images.json)。单任务最多 5,000 项，清单不设固定文件大小上限。
 
 链接过期后重新导入清单，选择“继续已有任务”。JSON 保持相同的 `id`，TXT 保持原顺序，已完成图片不会重复下载。
 
