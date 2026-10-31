@@ -54,7 +54,7 @@ enum FileStorage {
         let size = (try manager.attributesOfItem(atPath: temporaryURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         guard size > 0 else { throw TransferError.notImage }
         var name = ListImporter.safeFilename(identity.filename)
-        if (name as NSString).pathExtension.lowercased() == "img", let ext {
+        if ((name as NSString).pathExtension.lowercased() == "img" || (name as NSString).pathExtension.isEmpty), let ext {
             name = (name as NSString).deletingPathExtension + "." + ext
         }
         let directory = folder(identity.batchID).appendingPathComponent(identity.attemptID.uuidString, isDirectory: true)

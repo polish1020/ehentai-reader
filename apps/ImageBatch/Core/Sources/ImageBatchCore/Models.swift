@@ -67,11 +67,12 @@ public struct DownloadBatch: Codable, Identifiable, Sendable {
     @discardableResult public mutating func updateLinks(_ list: ImportedList) -> Int {
         var changed = 0
         var ids = Dictionary(items.enumerated().compactMap { index, item in item.externalID.map { ($0, index) } }, uniquingKeysWith: { first, _ in first })
-        var names = Dictionary(items.enumerated().map { ($0.element.filename, $0.offset) }, uniquingKeysWith: { first, _ in first })
+        func nameKey(_ name: String) -> String { name.precomposedStringWithCanonicalMapping.lowercased() }
+        var names = Dictionary(items.enumerated().map { (nameKey($0.element.filename), $0.offset) }, uniquingKeysWith: { first, _ in first })
         for entry in list.items {
             let index: Int?
-            if let id = entry.id { index = ids[id] ?? names[entry.filename].flatMap { items[$0].externalID == nil ? $0 : nil } }
-            else { index = names[entry.filename] }
+            if let id = entry.id { index = ids[id] ?? names[nameKey(entry.filename)].flatMap { items[$0].externalID == nil ? $0 : nil } }
+            else { index = names[nameKey(entry.filename)] }
             if let index {
                 if items[index].externalID == nil { items[index].externalID = entry.id }
                 if let id = items[index].externalID { ids[id] = index }
@@ -79,7 +80,7 @@ public struct DownloadBatch: Codable, Identifiable, Sendable {
                 items[index].url = entry.url; items[index].state = .waiting; items[index].error = nil
             } else {
                 if let id = entry.id { ids[id] = items.count }
-                names[entry.filename] = items.count; items.append(DownloadItem(entry: entry))
+                names[nameKey(entry.filename)] = items.count; items.append(DownloadItem(entry: entry))
             }
             changed += 1
         }

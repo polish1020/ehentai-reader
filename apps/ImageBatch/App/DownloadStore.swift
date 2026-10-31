@@ -145,7 +145,7 @@ import UIKit
                     persist(); continue
                 }
                 if let (name, bytes) = FileStorage.recovered(batchID: batchID, item: item) {
-                    guard deliveries.count < 2 else { continue }
+                    guard deliveries.count < (batches[b].destination.kind == .photos ? 1 : 2) else { continue }
                     batches[b].items[i].received = bytes; batches[b].items[i].expected = bytes
                     deliver(batchID: batchID, itemID: item.id, filename: name)
                     continue

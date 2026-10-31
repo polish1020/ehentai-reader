@@ -82,15 +82,16 @@ enum SaveDestinationWriter {
         let prepared = try await Task.detached(priority: .utility) { try photoCompatibleFile(file) }.value
         defer { if prepared != file { try? FileManager.default.removeItem(at: prepared) } }
         let box = AssetIDBox()
+        let photoName = prepared == file ? file.lastPathComponent : file.deletingPathExtension().lastPathComponent + "." + prepared.pathExtension
         return try await withCheckedThrowingContinuation { continuation in
             PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset()
                 let options = PHAssetResourceCreationOptions()
-                options.originalFilename = prepared.lastPathComponent
+                options.originalFilename = photoName
                 request.addResource(with: .photo, fileURL: prepared, options: options)
                 box.set(request.placeholderForCreatedAsset?.localIdentifier)
             } completionHandler: { success, error in
-                if success { continuation.resume(returning: DeliveryResult(kind: .photos, filename: file.lastPathComponent, assetIdentifier: box.get())) }
+                if success { continuation.resume(returning: DeliveryResult(kind: .photos, filename: photoName, assetIdentifier: box.get())) }
                 else { continuation.resume(throwing: error ?? DestinationError.format) }
             }
         }

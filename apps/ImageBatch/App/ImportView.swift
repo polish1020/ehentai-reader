@@ -46,6 +46,23 @@ struct ImportView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if !store.batches.isEmpty {
+                    Section("导入方式") {
+                        Picker("任务", selection: $draft.updating) {
+                            Text("新建任务").tag(UUID?.none)
+                            ForEach(store.batches) { batch in
+                                Text("继续 · \(batch.name)").tag(Optional(batch.id))
+                            }
+                        }
+                        .onChange(of: draft.updating) { _, value in
+                            if let batch = store.batches.first(where: { $0.id == value }) { draft.name = batch.name }
+                        }
+                        if let batch = store.batches.first(where: { $0.id == draft.updating }) {
+                            Text(batch.destination.kind == .photos ? "沿用原任务：保存到相册" : batch.destination.kind == .folder ? "沿用原任务目录：\(batch.destination.label ?? "所选目录")" : "沿用原任务：保存在应用内")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 Section {
                     TextField("任务名称", text: $draft.name).accessibilityIdentifier("import-name")
                     TextEditor(text: $draft.text)
@@ -103,8 +120,8 @@ struct ImportView: View {
                         busy = true
                         Task {
                             do {
-                                if draft.updating == nil, saveKind == .photos { try await SaveDestinationWriter.authorizePhotos() }
-                                let destination = SaveDestination(kind: saveKind, bookmark: folderBookmark, label: folderName)
+                                let destination = store.batches.first(where: { $0.id == draft.updating })?.destination ?? SaveDestination(kind: saveKind, bookmark: folderBookmark, label: folderName)
+                                if destination.kind == .photos { try await SaveDestinationWriter.authorizePhotos() }
                                 try store.add(list, updating: draft.updating, destination: destination); dismiss()
                             } catch { self.error = error.localizedDescription; busy = false }
                         }

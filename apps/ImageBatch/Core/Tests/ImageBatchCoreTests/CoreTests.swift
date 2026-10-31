@@ -92,6 +92,16 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(restored.items[0].attemptID, restored.items[0].id)
     }
 
+    func testFilenameMatchingIgnoresCaseWithoutDownloadingCompletedItemsAgain() throws {
+        let first = try ListImporter.parse(Data(#"{"items":[{"url":"https://e.example/old","filename":"One.JPG"}]}"#.utf8))
+        var batch = DownloadBatch(list: first); batch.items[0].state = .completed
+        let updated = try ListImporter.parse(Data(#"{"items":[{"url":"https://e.example/new","filename":"one.jpg"}]}"#.utf8))
+        XCTAssertEqual(batch.updateLinks(updated), 0)
+        XCTAssertEqual(batch.items.count, 1)
+        XCTAssertEqual(batch.completedCount, 1)
+        XCTAssertEqual(batch.items[0].url.absoluteString, "https://e.example/old")
+    }
+
     func testStreamingZIPCanBeReadBySystemUnzipIncludingUnicodeAndBinaryFiles() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
