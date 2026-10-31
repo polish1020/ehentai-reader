@@ -1,4 +1,4 @@
-import {metadata,errorMessage,getGallery,galleryWithPages,galleryReference,setExScope,thumbnailSource} from './source.mjs';
+import {metadata,getGallery,galleryWithPages,galleryReference,setExScope,thumbnailSource} from './source.mjs';
 import {categories,excludedCategories,tagQuery} from './filters.mjs';
 import {ListStore} from './navigation.mjs';
 import {ReaderPreloader,preloadNeighbors} from './reader-preload.mjs';
@@ -16,6 +16,8 @@ document.addEventListener('keydown',event => {
   if (event.key === 'Tab') document.documentElement.dataset.keyboardFocus = 'true';
 },true);
 document.addEventListener('pointerdown',() => { delete document.documentElement.dataset.keyboardFocus; },true);
+// Keep this local so an older cached source module can still load during updates.
+const errorMessage=value=>String(value||'请求失败，请稍后重试').replace(/(?:E-Hentai|ExHentai)(?:\s+|(?=[:：]|$))/gi,'').trim()||'请求失败，请稍后重试';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const names = {discover:'发现', favorites:'收藏', history:'足迹', library:'全部图集'};
