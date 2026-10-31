@@ -37,6 +37,10 @@ final class CoreTests: XCTestCase {
         XCTAssertLessThan(name.utf8.count, 200)
         XCTAssertTrue(name.hasSuffix(".png"))
         XCTAssertFalse(ListImporter.safeFilename("../../").contains("/"))
+        let batchID = UUID()
+        let folder = SaveDestination.folderName(String(repeating: "图", count: 100) + ".a.very.long.extension", batchID: batchID)
+        XCTAssertEqual(folder, ListImporter.safeFilename(folder))
+        XCTAssertTrue(folder.hasPrefix(String(batchID.uuidString.prefix(8))))
     }
 
     func testRefreshingLinksPreservesCompletedImagesAndTaskSerialization() throws {

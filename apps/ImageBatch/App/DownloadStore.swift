@@ -92,7 +92,7 @@ import UIKit
             var batch = DownloadBatch(list: list, destination: destination)
             if destination.kind == .folder {
                 guard destination.bookmark != nil else { throw DestinationError.folder }
-                batch.destination.subfolder = ListImporter.safeFilename(list.name) + "-" + String(batch.id.uuidString.prefix(8))
+                batch.destination.subfolder = SaveDestination.folderName(list.name, batchID: batch.id)
             }
             next.insert(batch, at: 0)
         }

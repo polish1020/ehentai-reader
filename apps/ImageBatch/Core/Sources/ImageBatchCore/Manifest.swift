@@ -45,7 +45,8 @@ public enum ListImporter {
         guard let text = String(data: data, encoding: .utf8) else { throw ImportError.invalidText }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{feff}")))
         guard !trimmed.isEmpty else { throw ImportError.empty }
-        var name = defaultName
+        var name = defaultName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { name = "图片任务" }
         let raw: [Item]
         if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
             let json = Data(trimmed.utf8), decoder = JSONDecoder()

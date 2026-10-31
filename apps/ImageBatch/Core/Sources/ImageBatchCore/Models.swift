@@ -13,6 +13,10 @@ public struct SaveDestination: Codable, Equatable, Sendable {
     public init(kind: DestinationKind = .app, bookmark: Data? = nil, label: String? = nil, subfolder: String? = nil) {
         self.kind = kind; self.bookmark = bookmark; self.label = label; self.subfolder = subfolder
     }
+    public static func folderName(_ name: String, batchID: UUID) -> String {
+        // Put uniqueness first so long titles cannot truncate it away.
+        ListImporter.safeFilename(String(batchID.uuidString.prefix(8)) + "-" + name)
+    }
 }
 
 public struct DownloadItem: Codable, Identifiable, Sendable {
