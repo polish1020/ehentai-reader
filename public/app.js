@@ -228,7 +228,7 @@ function render() {
   const placeholder=favoriteCollection(list)?'搜索收藏':localCollection(list)?'搜索阅读足迹':'搜索图集或粘贴图集链接';
   const heading=searchPage?`<header class="search-page-header"><button class="icon-button" data-action="search-back" aria-label="返回上一页">${icon('back')}</button><form id="search-page-form"><label class="search"><span aria-hidden="true">${icon('search')}</span><input id="search" type="search" enterkeyhint="search" placeholder="${placeholder}" value="${escape(list.query)}" aria-label="搜索图集" autocomplete="off"></label><button class="primary-button search-submit" type="submit">搜索</button></form></header>`:'';
   const options=`<div class="list-tool-row"><span>全局分类</span><button class="category-button" data-action="settings" aria-label="设置全局分类">${state.categories.length===categories.length?'全部分类':`已选 ${state.categories.length} 类`} ${icon('next')}</button></div><label class="list-tool-row">排序<select id="sort" aria-label="图集排序">${view==='discover'||searchPage||feedFor(list)==='favorites'?'<option value="source">默认顺序</option>':''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select></label><div class="list-tool-row"><span>显示方式</span><div class="list-tool-buttons"><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${icon(list.listMode?'grid':'list')}</button></div></div>`;
-  $('#main').innerHTML=`${heading}${searchPage?'<section id="search-history" class="search-history" aria-label="最近搜索" hidden></section>':''}${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h1><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h1><div class="list-heading-actions">${localCollection(list)?'<button class="text-button history-clear" data-action="clear-history">清空足迹</button>':''}<button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">${icon('refresh')}</button>${features.tools(list,options,state.categories.length!==categories.length)}</div></div><p id="favorite-notice" class="feature-note" role="status" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section>`;
+  $('#main').innerHTML=`${heading}${searchPage?'<section id="search-history" class="search-history" aria-label="最近搜索" hidden></section>':''}${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h1><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h1><div class="list-heading-actions">${localCollection(list)?'<button class="text-button history-clear" data-action="clear-history">清空足迹</button>':''}<button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">${icon('refresh')}</button>${features.tools(list,options,state.categories.length!==categories.length)}</div></div><p id="favorite-notice" class="feature-note" role="status" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><button class="icon-button back-to-top" data-action="back-to-top" aria-label="返回顶部" title="返回顶部" hidden>${icon('top')}</button>`;
   $('#sort').value=list.sort;renderQuickTags();renderResults();renderSearchHistory();decorateIcons();
 }
 async function loadFavorites(target,{append,request,search,options,selected,cursor}) {
@@ -548,7 +548,7 @@ function restoreScroll() {
   const target = list, y = target.scrollY;
   restoringScroll = true;
   requestAnimationFrame(() => {
-    if (target === list && entry.screen !== 'reader') window.scrollTo({top:y,behavior:'instant'});
+    if (target === list && entry.screen !== 'reader') {window.scrollTo({top:y,behavior:'instant'});updateBackToTop();}
     requestAnimationFrame(() => { restoringScroll = false;listLoader.check(); });
   });
 }
@@ -594,7 +594,7 @@ function applyNavigation() {
     if (previousEntry.screen === 'reader') next.photoIndex = currentPage;
     history.replaceState(next,'',entryHash(next));
   }
-  entry = next; appliedEntry = next.key;
+  entry = next; appliedEntry = next.key;updateBackToTop();
   list = lists.lists.get(next.listKey);
   if (!list) {
     list = lists.create(next.fallback?.view || next.view,next.fallback?.query || '',next.source || next.fallback?.source || 'e-hentai');
@@ -657,7 +657,13 @@ function flushSearch() {
 $('#detail-dialog').addEventListener('cancel',event => { event.preventDefault(); back(); });
 window.addEventListener('popstate',applyNavigation);
 window.addEventListener('hashchange',applyNavigation);
+function updateBackToTop() {
+  const button=$('[data-action=back-to-top]');if(!button)return;
+  button.hidden=entry?.screen!=='list'||window.scrollY<Math.max(320,innerHeight*.6);
+}
+window.addEventListener('resize',updateBackToTop);
 window.addEventListener('scroll',() => {
+  updateBackToTop();
   if (restoringScroll || entry?.screen !== 'list') return;
   list.scrollY = window.scrollY;
   clearTimeout(scrollTimer); scrollTimer = setTimeout(remember,150);
@@ -809,6 +815,7 @@ document.addEventListener('click', event => {
   if (button.dataset.read) return navigate('reader',list,button.dataset.read);
   if (button.dataset.searchTag) return searchTag(button.dataset.searchTag);
   const actions = {
+    'back-to-top':()=>{$('#search')?.blur();if(event.detail===0)$('#main').focus({preventScroll:true});window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});},
     'clear-search-history':()=>{if(confirm('清空当前搜索范围的搜索记录？')){state.searchHistory=state.searchHistory.filter(item=>item.source!==list.source||item.scope!==searchScope(list));save();renderSearchHistory();}},
     'clear-ex-session':clearExSession, 'clear-image-cache':async () => { await clearImageCaches(); updateImageCount(); toast('已清除图片缓存'); },
     'select-all-categories':() => selectCategories(true), 'clear-categories':() => selectCategories(false), 'apply-categories':applyCategories,

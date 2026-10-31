@@ -188,10 +188,12 @@
 .advanced-tools>summary>.ui-icon{width:17px;height:17px}
 .advanced-tools small{padding:3px 7px;border-radius:12px;background:var(--soft);font-size:10px}
 .advanced-tools .source-tools{margin:0;padding-top:10px}
-.search-page-header{position:sticky;top:0;z-index:25;display:flex;align-items:center;gap:8px;background:var(--bg);padding:10px 0 14px;margin-bottom:12px}
-.search-page-header form{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
-.search-page-header .search{min-width:0;width:auto;flex:1;flex-basis:auto;height:44px}
-.search-page-header .search-submit{min-height:44px;padding:0 13px;gap:0}
+.search-page-header{position:sticky;top:0;z-index:25;display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:4px;background:var(--bg);padding:8px 0;margin-bottom:8px}
+.search-page-header form{display:grid;grid-template-columns:minmax(0,1fr) 56px;align-items:center;gap:8px;width:100%;min-width:0}
+.search-page-header>.icon-button{width:36px;height:44px;padding:0}
+.search-page-header .search{min-width:0;width:100%;height:44px}
+.search-page-header .search input{font-size:16px}
+.search-page-header .search-submit{width:56px;min-width:56px;height:44px;min-height:44px;padding:0;gap:0;font-size:14px;line-height:1;white-space:nowrap;word-break:keep-all}
 body.searching .topbar,body.searching .bottom-nav,body.searching .page-footer{display:none}
 body.searching main{padding-top:8px}
 .load-sentinel{display:flex;align-items:center;justify-content:center;min-height:64px;font-size:12px;color:var(--muted)}
@@ -205,7 +207,7 @@ body.searching main{padding-top:8px}
   .feed-tabs>div{padding-bottom:5px}
   .advanced-tools{margin-bottom:12px}
   body.searching main{padding-top:0;padding-bottom:30px}
-  .search-page-header{margin:0 -20px 14px;padding:calc(8px + env(safe-area-inset-top)) 12px 10px;border-bottom:1px solid var(--line)}
+  .search-page-header{margin:0 -20px 8px;padding:calc(6px + env(safe-area-inset-top)) 8px 8px;border-bottom:1px solid var(--line)}
   .search-page-header .search{padding:0 10px}
 }
 
@@ -333,3 +335,7 @@ body.searching main{padding-top:8px}
 @media(max-width:760px){.search-history-query span{max-width:calc(100vw - 140px)}}
 
 .reader-content.scroll img{cursor:zoom-in}
+
+.back-to-top{position:fixed;right:calc(24px + env(safe-area-inset-right));bottom:calc(24px + env(safe-area-inset-bottom));z-index:28;width:44px;height:44px;color:var(--green);background:var(--surface);border:1px solid var(--line);box-shadow:0 4px 16px #0002}
+body.reading .back-to-top,body:has(dialog[open]) .back-to-top{display:none}
+@media(max-width:760px){.back-to-top{right:calc(16px + env(safe-area-inset-right));bottom:calc(88px + env(safe-area-inset-bottom))}body.searching .back-to-top{bottom:calc(20px + env(safe-area-inset-bottom))}}
