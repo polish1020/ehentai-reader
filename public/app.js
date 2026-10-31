@@ -498,8 +498,9 @@ let readerWidth = 0;
 new ResizeObserver(entries=>{
   const width = entries[0].contentRect.width;
   if (!width || width === readerWidth) return;
+  const previousWidth = readerWidth;
   readerWidth = width;
-  if (activeGallery && readerMode === 'scroll') goPage(currentPage);
+  if (previousWidth && activeGallery && readerMode === 'scroll') goPage(currentPage);
 }).observe($('#reader-content'));
 async function openReader(id) {
   const request = ++readerRequest;
