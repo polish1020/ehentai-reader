@@ -61,3 +61,13 @@ test('a visible image and its simultaneous preload share one network request',as
   const responses=await Promise.all([first,second]);
   assert.deepEqual(await Promise.all(responses.map(response=>response.text())),['shared image','shared image']);
 });
+
+test('storage usage identifies cache-only measurements, labels whole-site estimates separately and handles unsupported browsers',async()=>{
+ const {cacheStorageUsage,formatBytes}=await import('../public/image-cache.mjs');
+ assert.deepEqual(await cacheStorageUsage({estimate:async()=>({usage:9999,usageDetails:{caches:2048}})}),{kind:'cache',bytes:2048});
+ assert.deepEqual(await cacheStorageUsage({estimate:async()=>({usage:4096})}),{kind:'site',bytes:4096});
+ assert.equal(await cacheStorageUsage({}),null);
+ assert.equal(await cacheStorageUsage({estimate:async()=>{throw Error('denied');}}),null);
+ assert.equal(await cacheStorageUsage({estimate:async()=>({usage:NaN})}),null);
+ assert.equal(formatBytes(1024**2*1.5),'1.5 MB');assert.equal(formatBytes(0),'0 B');
+});

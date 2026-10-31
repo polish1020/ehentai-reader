@@ -18,6 +18,7 @@ const paths={
   'thumb-down':'M7 14V3H3v11h4zM7 14l4 7h2v-5h5a3 3 0 002.9-3.8l-2-7A3 3 0 0016 3H7',
   tag:'M3 3h8l10 10-8 8L3 11V3zM7 7h.01',
   up:'M6 14l6-6 6 6',down:'M6 10l6 6 6-6',
+  trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7',
   settings:'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6'
 };
 export function icon(name) {

@@ -306,3 +306,30 @@ body.searching main{padding-top:8px}
 .list-mode .card-sub>span:not(:first-child){flex-shrink:0}
 .export-progress{width:100%;height:8px;accent-color:var(--green)}
 .export-failures{margin-top:16px;font-size:12px}
+
+.history-meta{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px;color:var(--muted);font-size:10px;min-width:0}
+.history-meta time{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-remove{width:36px;height:36px;min-width:36px;color:var(--muted)}
+.history-remove .ui-icon{width:17px;height:17px}
+.history-clear{white-space:nowrap;font-size:11px;min-height:44px}
+.list-mode .history-meta{margin-left:100px;margin-top:0}
+.search-history{margin:0 0 20px;padding:12px 0;border-bottom:1px solid var(--line)}
+.search-history-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.search-history-heading h2{font-size:14px;margin:0;font-weight:500}
+.search-history-heading button{min-height:44px;font-size:12px;color:var(--muted)}
+.search-history-items{display:flex;flex-wrap:wrap;gap:8px}
+.search-history-item{display:flex;align-items:center;max-width:100%;border:1px solid var(--line);border-radius:22px;min-width:0}
+.search-history-query{display:flex;align-items:center;gap:7px;padding:0 0 0 12px;min-height:44px;min-width:0;color:var(--text);font-size:12px}
+.search-history-query .ui-icon{width:15px;height:15px;flex-shrink:0;color:var(--muted)}
+.search-history-query span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.search-history-item>.icon-button{width:38px;height:44px;min-width:38px;color:var(--muted)}
+.search-history-item>.icon-button .ui-icon{width:14px;height:14px}
+.cache-statistics{display:flex;flex-direction:column;gap:7px;flex:1;min-width:160px}
+#image-cache-usage{font-size:11px;color:var(--muted);line-height:1.7}
+.photo-track{touch-action:none;-webkit-user-select:none;user-select:none}
+.photo-track.photo-zoomed{overflow-x:hidden}
+.photo-zoomed .photo-slide>img{cursor:grab}
+.photo-track:not(.photo-zoomed) .photo-slide>img{will-change:auto}
+@media(max-width:760px){.search-history-query span{max-width:calc(100vw - 140px)}}
+
+.reader-content.scroll img{cursor:zoom-in}

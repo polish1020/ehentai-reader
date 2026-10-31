@@ -41,3 +41,18 @@ export async function imageCacheCount() {
   const keys=(await caches.keys()).filter(key => key.startsWith(imageCachePrefix));
   return (await Promise.all(keys.map(async key => (await (await caches.open(key)).keys()).length))).reduce((total,n) => total+n,0);
 }
+
+export async function cacheStorageUsage(storage=globalThis.navigator?.storage) {
+  if(!storage?.estimate)return null;
+  try {
+    const estimate=await storage.estimate(),cache=estimate.usageDetails?.caches;
+    if(typeof cache==='number'&&Number.isFinite(cache)&&cache>=0)return {kind:'cache',bytes:cache};
+    if(typeof estimate.usage==='number'&&Number.isFinite(estimate.usage)&&estimate.usage>=0)return {kind:'site',bytes:estimate.usage};
+  }catch{ /* Some browsers disable storage estimates in private mode. */ }
+  return null;
+}
+export function formatBytes(bytes) {
+  if(bytes===0)return '0 B';
+  const units=['B','KB','MB','GB','TB'],index=Math.min(units.length-1,Math.max(0,Math.floor(Math.log(bytes)/Math.log(1024))));
+  return `${(bytes/1024**index).toLocaleString('zh-CN',{maximumFractionDigits:index?1:0})} ${units[index]}`;
+}

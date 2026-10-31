@@ -10,7 +10,8 @@ import {InfiniteList} from './list-loader.mjs';
 import {SourceFeatures} from './source-features.mjs';
 import {feeds,feedFor,searchOptions,accepts,quickTags} from './source-options.mjs';
 import {icon,decorateIcons} from './icons.mjs';
-import {imageCacheCount,clearImageCaches,clearPrivateImageCaches} from './image-cache.mjs';
+import {imageCacheCount,cacheStorageUsage,formatBytes,clearImageCaches,clearPrivateImageCaches} from './image-cache.mjs';
+import {cleanSearchHistory,saveSearch,recentSearches,searchScope,visitTime} from './user-records.mjs';
 document.addEventListener('keydown',event => {
   if (event.key === 'Tab') document.documentElement.dataset.keyboardFocus = 'true';
 },true);
@@ -25,6 +26,7 @@ try { state = JSON.parse(localStorage.getItem('yijing-v1')) || {}; } catch { sta
 if (!state || typeof state !== 'object' || Array.isArray(state)) state = {};
 state.favorites = Array.isArray(state.favorites) ? state.favorites.filter(id => typeof id === 'string') : [];
 state.progress = state.progress && typeof state.progress === 'object' && !Array.isArray(state.progress) ? state.progress : {};
+state.searchHistory = cleanSearchHistory(state.searchHistory);
 state.mode = 'scroll';
 state.direction = state.direction === 'rtl' ? 'rtl' : 'ltr';
 state.theme = ['light','dark','system'].includes(state.theme) ? state.theme : 'system';
@@ -137,7 +139,7 @@ function card(g) {
   const p = state.progress[g.id], percent = p ? Math.round((progressFor(g) + 1) / pageCount(g) * 100) : 0;
   const confirmed=favorites.statusKnown(g.id)&&favorites.remote(g.id)&&favorites.has(g.id);
   const rating=Number(g.rating),rated=Number.isFinite(rating)&&rating>0&&rating<=5;
-  return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}${confirmed?'（已收藏）':''}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${confirmed?`<span class="card-favorite-state" aria-label="已收藏到源站">${icon('heart')}</span>`:''}${pageCount(g)} P</span>${rated?`<span class="rating-badge" aria-label="评分 ${rating.toFixed(1)} 星">${icon('star')}<span>${rating.toFixed(1)}</span></span>`:''}</div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span>${rated?`<span class="card-inline-rating" aria-label="评分 ${rating.toFixed(1)} 星">${icon('star')}<span>${rating.toFixed(1)}</span></span>`:''}</div>${favoriteCollection(list)&&favorites.localOnly(g.id)?'<span class="favorite-local-label">仅本地</span>':''}${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button>${favoriteCollection(list)&&favorites.localOnly(g.id)?`<button class="favorite-sync" data-sync-favorite="${escape(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.busy(g.id)?'正在同步…':'同步到源站'}</button>`:''}</article>`;
+  return `<article class="card"><button class="card-open" data-open="${escape(g.id)}" aria-label="查看 ${escape(g.title)}${confirmed?'（已收藏）':''}"><div class="cover-wrap"><img src="${escape(imageFor(g))}" alt="${escape(g.title)} 封面" loading="lazy" width="600" height="800"><span class="cover-label">${escape(g.category)}</span><span class="page-badge">${confirmed?`<span class="card-favorite-state" aria-label="已收藏到源站">${icon('heart')}</span>`:''}${pageCount(g)} P</span>${rated?`<span class="rating-badge" aria-label="评分 ${rating.toFixed(1)} 星">${icon('star')}<span>${rating.toFixed(1)}</span></span>`:''}</div><div class="card-text"><h3>${escape(g.title)}</h3><div class="card-sub"><span>${escape(g.creator)}</span><span>${escape(g.date)}</span>${rated?`<span class="card-inline-rating" aria-label="评分 ${rating.toFixed(1)} 星">${icon('star')}<span>${rating.toFixed(1)}</span></span>`:''}</div>${favoriteCollection(list)&&favorites.localOnly(g.id)?'<span class="favorite-local-label">仅本地</span>':''}${p ? `<div class="progress-track" aria-label="已读 ${percent}%"><span style="width:${percent}%"></span></div>` : ''}</div></button>${localCollection(list)?historyInfo(g):''}${favoriteCollection(list)&&favorites.localOnly(g.id)?`<button class="favorite-sync" data-sync-favorite="${escape(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.busy(g.id)?'正在同步…':'同步到源站'}</button>`:''}</article>`;
 }
 function filtered() {
   if(list.view==='search'&&!searchReady(list))return [];
@@ -152,6 +154,25 @@ function filtered() {
   if(q&&favoriteCollection(list))items=items.filter(gallery=>favoriteMatches(gallery,list.query));
   if (q && localCollection(list)) items = items.filter(g => [g.title,g.creator,...g.tags].join(' ').toLowerCase().includes(q));
   return items.sort((a,b) => collectionView(list) === 'history' ? (state.progress[b.id]?.time || 0) - (state.progress[a.id]?.time || 0) : list.sort === 'source' ? 0 : list.sort === 'title' ? a.title.localeCompare(b.title,'zh-CN') : list.sort === 'pages' ? pageCount(b) - pageCount(a) : b.date.localeCompare(a.date));
+}
+function historyInfo(g) {
+  const time=visitTime(state.progress[g.id]?.time);
+  return `<div class="history-meta"><time ${time.datetime?`datetime="${time.datetime}"`:''} title="最近访问：${escape(time.title)}">访问于 ${escape(time.label)}</time><button class="icon-button history-remove" data-remove-history="${escape(g.id)}" aria-label="删除 ${escape(g.title)} 的足迹">${icon('trash')}</button></div>`;
+}
+function renderSearchHistory() {
+  const root=$('#search-history');if(!root)return;
+  const records=recentSearches(state.searchHistory,list);
+  root.hidden=!records.length||!!list.query.trim();
+  root.innerHTML=`<div class="search-history-heading"><h2>最近搜索</h2><button class="text-button" data-action="clear-search-history">清空</button></div><div class="search-history-items">${records.map((item,index)=>`<div class="search-history-item"><button class="search-history-query" data-recent-search="${index}" title="${escape(item.query)}">${icon('clock')}<span>${escape(item.query)}</span></button><button class="icon-button" data-remove-search="${index}" aria-label="删除搜索记录 ${escape(item.query)}">${icon('close')}</button></div>`).join('')}</div>`;
+}
+function rememberSearch() {
+  if(list?.view!=='search'||!list.query.trim())return;
+  if(list.source==='exhentai'&&(!exSession.scope||list.authScope!==exSession.scope)||searchScope(list)==='favorites'&&list.authScope&&list.authScope!==exSession.scope)return;
+  if(recentSearches(state.searchHistory,list)[0]?.query===list.query.trim())return;
+  state.searchHistory=saveSearch(state.searchHistory,list);save();
+}
+function removeHistory(id) {
+  delete state.progress[id];save();renderResults();remember();toast('已删除足迹和阅读进度');
 }
 const listLoading=()=>'<div class="loading list-loading" role="status" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span><span>正在获取实时图集…</span></div>';
 const regularDivider=()=>'<div class="regular-divider" role="separator" aria-label="以下为常规图集"><span>以下为常规图集</span></div>';
@@ -209,8 +230,8 @@ function render() {
   const placeholder=favoriteCollection(list)?'搜索收藏':localCollection(list)?'搜索阅读足迹':`搜索 ${sourceName(list.source)} 图集`;
   const heading=searchPage?`<header class="search-page-header"><button class="icon-button" data-action="search-back" aria-label="返回上一页">${icon('back')}</button><form id="search-page-form"><label class="search"><span aria-hidden="true">${icon('search')}</span><input id="search" type="search" enterkeyhint="search" placeholder="${placeholder}" value="${escape(list.query)}" aria-label="搜索图集" autocomplete="off"></label><button class="primary-button search-submit" type="submit">搜索</button></form></header>`:'';
   const options=`<div class="list-tool-row"><span>全局分类</span><button class="category-button" data-action="settings" aria-label="设置全局分类">${state.categories.length===categories.length?'全部分类':`已选 ${state.categories.length} 类`} ${icon('next')}</button></div><label class="list-tool-row">排序<select id="sort" aria-label="图集排序">${view==='discover'||searchPage||feedFor(list)==='favorites'?'<option value="source">源站顺序</option>':''}<option value="newest">最近更新</option><option value="title">名称排序</option><option value="pages">页数最多</option></select></label><div class="list-tool-row"><span>显示方式</span><div class="list-tool-buttons"><button data-action="view" class="icon-button" aria-label="切换列表布局" aria-pressed="${list.listMode}">${icon(list.listMode?'grid':'list')}</button></div></div>`;
-  $('#main').innerHTML=`${heading}${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h1><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h1><div class="list-heading-actions"><button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">${icon('refresh')}</button>${features.tools(list,options,state.categories.length!==categories.length)}</div></div><p id="favorite-notice" class="feature-note" role="status" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏优先同步到源站，失败时保存在本地；阅读进度与设置保存在当前设备。</div>`;
-  $('#sort').value=list.sort;renderQuickTags();renderResults();decorateIcons();
+  $('#main').innerHTML=`${heading}${searchPage?'<section id="search-history" class="search-history" aria-label="最近搜索" hidden></section>':''}${features.controls(list)}<section aria-label="图集列表"><div class="section-heading" id="result-heading"><h1><span id="listing-title">${searchPage?'搜索结果':pageNames[view]}</span><small id="result-count"></small></h1><div class="list-heading-actions">${localCollection(list)?'<button class="text-button history-clear" data-action="clear-history">清空足迹</button>':''}<button class="icon-button" data-action="refresh-list" aria-label="刷新当前列表">${icon('refresh')}</button>${features.tools(list,options,state.categories.length!==categories.length)}</div></div><p id="favorite-notice" class="feature-note" role="status" hidden></p><div id="gallery-grid" class="grid"></div><div id="list-status" class="list-status"></div></section><div class="content-notice">图集来自 ${escape(sourceName(list.source))}，已加载图片优先从本地缓存读取。收藏优先同步到源站，失败时保存在本地；阅读进度与设置保存在当前设备。</div>`;
+  $('#sort').value=list.sort;renderQuickTags();renderResults();renderSearchHistory();decorateIcons();
 }
 async function loadFavorites(target,{append,request,search,options,selected,cursor}) {
   const source=target.source,current=()=>request===target.requestId;
@@ -310,6 +331,7 @@ function thumbnailStore(gallery) {
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
   back,
   dismiss:()=>{
+    if(entry.photoOrigin==='reader')return back();
     remember();
     if (entry.albumSteps > 0) history.go(-entry.albumSteps);
     else {
@@ -341,7 +363,9 @@ async function openPhotos(id,index=0,immersive=false) {
     if (request !== photoRequest || !['photo','photo-full'].includes(entry.screen) || entry.galleryId !== id) return;
     if (gallery.source === 'exhentai') await sendImageContext();
     if (request !== photoRequest) return;
+    photoViewer.returnHint=entry.photoOrigin==='reader'?'轻点或下滑返回连续阅读 · 双击缩放':'轻点退出全屏 · 双击缩放 · 下滑返回图集';
     photoViewer.show(galleryWithPages(gallery),index,thumbnailStore(gallery),immersive);
+    $('#photo-viewer .photo-dismiss-hint').textContent=photoViewer.returnHint;
   } catch (error) { if(request===photoRequest)photoViewer.error(error.message); }
 }
 function hidePhotos() {
@@ -473,7 +497,7 @@ $('#reader-content').addEventListener('scroll',()=>{
 let readerWidth = 0;
 new ResizeObserver(entries=>{
   const width = entries[0].contentRect.width;
-  if (width === readerWidth) return;
+  if (!width || width === readerWidth) return;
   readerWidth = width;
   if (activeGallery && readerMode === 'scroll') goPage(currentPage);
 }).observe($('#reader-content'));
@@ -492,11 +516,12 @@ async function openReader(id) {
     const g = known ? galleryWithPages(known) : await getGallery(gid,token,source);
     if (request !== readerRequest || entry.screen !== 'reader' || entry.galleryId !== id) return;
     knownGalleries.set(g.id,g);
-    activeGallery = g; currentPage = progressFor(g); readerMode = state.mode; readerPreloader?.close(); readerPreloader = makePreloader(g);
+    activeGallery = g; currentPage = entry.readerRestore&&Number.isInteger(entry.readerRestore.page)?Math.max(0,Math.min(g.pages.length-1,entry.readerRestore.page)):progressFor(g); readerMode = state.mode; readerPreloader?.close(); readerPreloader = makePreloader(g);
     $('#reader-title').textContent = g.title; $('#reader-source').textContent = `${sourceName(g.source)} · ${g.category}`;
     $('#page-slider').disabled = false;
     for (const action of ['reader-mode','reader-favorite']) $(`[data-action=${action}]`).disabled = false;
     $('#page-slider').max = String(g.pages.length); updateReaderFavorite(); renderReader();
+    if(entry.readerRestore){$('#reader-content').scrollTop+=Number(entry.readerRestore.offset)||0;delete entry.readerRestore;remember();}
   } catch (error) {
     if (request !== readerRequest || entry.screen !== 'reader' || entry.galleryId !== id) return;
     $('#reader-content').innerHTML = `<div class="image-error"><h3>图集暂时无法加载</h3><p role="alert">${escape(error.message)}</p><button class="outline-button" data-action="retry-reader">重新加载</button><button class="outline-button" data-action="settings">设置凭证</button></div>`;
@@ -515,6 +540,7 @@ function goPage(page) {
 function remember() {
   if (!list || !entry) return;
   if (!restoringScroll && !document.body.classList.contains('reading')) list.scrollY = window.scrollY;
+  if (entry.screen==='reader'&&activeGallery) {const content=$('#reader-content'),anchor=content.querySelector(`[data-index="${currentPage}"]`);entry.readerPage=currentPage;entry.readerOffset=anchor?content.scrollTop-anchor.offsetTop:0;}
   if ($('#detail-dialog').open) { entry.detailScroll = $('#detail-dialog').scrollTop;entry.tagsOpen = !!$('#detail-dialog').querySelector('.photo-tag-panel')?.open; }
   history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source,feed:list.feed,filters:list.filters,searchOrigin:list.searchOrigin,searchScope:list.searchScope,searchFeed:list.searchFeed}},'');
   lists.save();
@@ -548,7 +574,7 @@ function adoptLocation() {
   return value;
 }
 function applyNavigation() {
-  flushSearch();
+  rememberSearch();flushSearch();
   const next = adoptLocation();
   if (next.key === appliedEntry) return;
   const legacy=lists.lists.get(next.listKey);
@@ -562,6 +588,7 @@ function applyNavigation() {
     return applyNavigation();
   }
   const previous = list, previousEntry = entry;
+  if(next.screen==='reader'&&previousEntry?.photoOrigin==='reader'&&previousEntry.galleryId===next.galleryId){const index=photoViewer.gallery?.id===next.galleryId?photoViewer.index:previousEntry.photoIndex,same=index===next.readerZoomIndex;next.readerRestore={page:same?next.readerPage:index,offset:same?next.readerOffset:0};}
   if (next.screen === 'detail' && previousEntry?.galleryId === next.galleryId && ['reader','photo','photo-full'].includes(previousEntry.screen)) next.focusPhoto = previousEntry.screen === 'reader' ? currentPage : photoViewer.index;
   if (next.screen === 'photo' && previousEntry?.galleryId === next.galleryId) {
     if (previousEntry.screen === 'photo-full') next.photoIndex = photoViewer.index;
@@ -600,9 +627,10 @@ function applyNavigation() {
   }
   lists.save();
 }
-function navigate(screen,target=list,galleryId=null,{replace=false,photoIndex=0}={}) {
-  remember();
+function navigate(screen,target=list,galleryId=null,{replace=false,photoIndex=0,photoOrigin=null}={}) {
+  rememberSearch();remember();
   const value = makeEntry(screen,target,galleryId,replace ? !!entry?.parent : true,photoIndex);
+  if(photoOrigin)value.photoOrigin=photoOrigin;
   if (galleryId && galleryId === entry?.galleryId && ['reader','photo','photo-full'].includes(screen)) {
     const steps = entry.screen === 'detail' ? 0 : entry.albumSteps;
     if (Number.isInteger(steps)) value.albumSteps = steps + (replace ? 0 : 1);
@@ -615,7 +643,7 @@ function navigateTab(view) {
   navigate('list',lists.tab(view,state.source) || lists.create(view,'',state.source));
 }
 function back() {
-  remember();
+  rememberSearch();remember();
   if (entry.parent) history.back();
   else if(list.view==='search'){const view=list.searchOrigin||'library';navigate('list',lists.tab(view,list.source)||lists.create(view,'',list.source),null,{replace:true});}
   else navigate('list',list,null,{replace:true});
@@ -674,6 +702,7 @@ function updateSourceSettings() {
   $('#ex-session-status').textContent = exSession.configured ? '凭证已保存在本机，关闭浏览器后仍可使用。可以切换到 ExHentai。' : '尚未保存凭证，请输入后验证。';
 }
 function purgeExLists() {
+  state.searchHistory=state.searchHistory.filter(item=>item.source!=='exhentai'&&item.scope!=='favorites');save();
   features.clearPrivate();
   for (const target of lists.lists.values()) if (target.source === 'exhentai' || accountList(target)) target.requestId = (target.requestId || 0) + 1;
   lists.removeSource('exhentai');
@@ -703,9 +732,14 @@ async function clearExSession() {
     updateFavorites();updateSourceSettings(); $('#ex-session-status').textContent = '已清除凭证和对应的私有图片缓存。';
   } catch (error) { $('#ex-session-status').textContent = error.message; }
 }
+let imageCountRequest=0;
 async function updateImageCount() {
-  try { $('#image-cache-count').textContent = `已缓存 ${await imageCacheCount()} 张图片`; }
-  catch { $('#image-cache-count').textContent = '当前浏览器暂不支持图片缓存'; }
+  const request=++imageCountRequest;
+  const [count,usage]=await Promise.allSettled([imageCacheCount(),cacheStorageUsage()]);
+  if(request!==imageCountRequest)return;
+  $('#image-cache-count').textContent=count.status==='fulfilled'?`已缓存 ${count.value} 张图片`:'当前浏览器暂不支持图片缓存';
+  const data=usage.status==='fulfilled'?usage.value:null;
+  $('#image-cache-usage').textContent=data?`${data.kind==='cache'?'缓存占用':'本站存储占用'}约 ${formatBytes(data.bytes)}${data.kind==='cache'?'（含应用资源）':'（含缓存及其他本地数据）'}`:'当前浏览器不提供存储占用统计';
 }
 $('#ex-credentials-form').addEventListener('submit',async event => {
   event.preventDefault();
@@ -760,6 +794,15 @@ document.addEventListener('click', event => {
   const button = event.target.closest('button'); if (!button) return;
   if (button.hasAttribute('data-open-photo')) return navigate('photo',list,entry.galleryId,{photoIndex:Number(button.dataset.openPhoto)});
   if (button.dataset.open) return navigate('detail',list,button.dataset.open);
+  if(button.dataset.removeHistory)return removeHistory(button.dataset.removeHistory);
+  if(button.hasAttribute('data-recent-search')){
+    const record=recentSearches(state.searchHistory,list)[Number(button.dataset.recentSearch)];if(!record)return;
+    list.query=record.query;$('#search').value=record.query;rememberSearch();renderSearchHistory();clearTimeout(renderTimer);renderTimer=null;debounceTarget=null;loadGalleries(false,list);remember();return;
+  }
+  if(button.hasAttribute('data-remove-search')){
+    const record=recentSearches(state.searchHistory,list)[Number(button.dataset.removeSearch)];
+    state.searchHistory=state.searchHistory.filter(item=>item!==record&&!(item.query===record?.query&&item.source===record?.source&&item.scope===record?.scope));save();renderSearchHistory();return;
+  }
   if(button.dataset.favorite){
     if(button.closest('.gallery-actions')&&favorites.has(button.dataset.favorite))return features.openFavorite();
     return favorite(button.dataset.favorite);
@@ -768,6 +811,7 @@ document.addEventListener('click', event => {
   if (button.dataset.read) return navigate('reader',list,button.dataset.read);
   if (button.dataset.searchTag) return searchTag(button.dataset.searchTag);
   const actions = {
+    'clear-search-history':()=>{if(confirm('清空当前搜索范围的搜索记录？')){state.searchHistory=state.searchHistory.filter(item=>item.source!==list.source||item.scope!==searchScope(list));save();renderSearchHistory();}},
     'clear-ex-session':clearExSession, 'clear-image-cache':async () => { await clearImageCaches(); updateImageCount(); toast('已清除图片缓存'); },
     'select-all-categories':() => selectCategories(true), 'clear-categories':() => selectCategories(false), 'apply-categories':applyCategories,
     'clear-search':() => { list.query = ''; clearTimeout(renderTimer); renderTimer = null; debounceTarget = null; render(); remember(); if (!localCollection(list)) loadGalleries(); },
@@ -783,7 +827,7 @@ document.addEventListener('click', event => {
 document.addEventListener('input', event => {
   if (event.target.id === 'search') {
     if (debounceTarget && debounceTarget !== list) flushSearch();
-    list.query = event.target.value; clearTimeout(renderTimer);
+    list.query = event.target.value;renderSearchHistory(); clearTimeout(renderTimer);
     const localIds=localCollection(list)?(collectionView(list)==='favorites'?state.favorites:Object.keys(state.progress)).filter(id=>galleryReference(id).source===list.source):[];
     if (localCollection(list) && localIds.every(id=>knownGalleries.has(id))) renderResults();
     else {
@@ -819,13 +863,15 @@ $('#reader-content').addEventListener('touchend', event => {
   if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) goPage(currentPage + (dx < 0 ? 1 : -1) * (state.direction === 'rtl' ? -1 : 1));
 }, {passive:true});
 $('#reader-content').addEventListener('click', event => {
-  if (!activeGallery || readerMode !== 'paged' || event.target.tagName !== 'IMG') return;
+  if (!activeGallery || event.target.tagName !== 'IMG') return;
+  if(readerMode==='scroll'){entry.readerZoomIndex=Number(event.target.dataset.page);return navigate('photo-full',list,activeGallery.id,{photoIndex:entry.readerZoomIndex,photoOrigin:'reader'});}
+  if(readerMode!=='paged')return;
   const x = event.clientX / innerWidth;
   if (x < .25 || x > .75) goPage(currentPage + (x > .75 ? 1 : -1) * (state.direction === 'rtl' ? -1 : 1));
 });
 function connectivity() { $('#network').textContent = navigator.onLine ? '实时图集' : '网络已断开'; $('#network').classList.toggle('offline',!navigator.onLine); }
 window.addEventListener('online',connectivity); window.addEventListener('offline',connectivity); connectivity();
-function suspendPage() { leavingPage = true; record(); remember(); }
+function suspendPage() { leavingPage = true; rememberSearch();record(); remember(); }
 window.addEventListener('beforeunload',suspendPage);
 window.addEventListener('pagehide',suspendPage);
 window.addEventListener('pageshow',event => {
@@ -845,10 +891,11 @@ function openSearch(query='',filters={},global=false) {
   target.searchFeed=global?'latest':['watched','favorites'].includes(feedFor(list))?feedFor(list):'latest';
   target.filters=filters;target.sort='source';
   navigate('list',target,null,{replace:list.view==='search'&&entry.screen==='list'});
+  if(query.trim())rememberSearch();
 }
 document.addEventListener('submit',event=>{
   if(event.target.id!=='search-page-form')return;
-  event.preventDefault();clearTimeout(renderTimer);renderTimer=null;debounceTarget=null;
+  event.preventDefault();rememberSearch();renderSearchHistory();clearTimeout(renderTimer);renderTimer=null;debounceTarget=null;
   if(!list.isLoading||!list.pendingRequest)loadGalleries(false,list);
   remember();$('#search')?.blur();
 });
