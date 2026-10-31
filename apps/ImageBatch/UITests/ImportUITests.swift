@@ -5,9 +5,12 @@ final class ImportUITests: XCTestCase {
 
     private func visibleImportForm(in app: XCUIApplication) -> XCUIElement? {
         app.collectionViews.allElementsBoundByIndex.first { collectionView in
-            guard collectionView.exists, collectionView.isHittable else { return false }
+            guard collectionView.exists else { return false }
+            // SwiftUI Form containers need not be hit targets themselves. A
+            // hittable import control identifies the foreground sheet instead.
             return ["import-name", "import-text", "save-destination", "import-count", "import-error", "import-manifest-toggle"].contains { identifier in
-                collectionView.descendants(matching: .any).matching(identifier: identifier).firstMatch.exists
+                let control = collectionView.descendants(matching: .any).matching(identifier: identifier).firstMatch
+                return control.exists && control.isHittable
             }
         }
     }
