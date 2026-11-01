@@ -7,7 +7,7 @@ const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 export class PhotoViewer {
   constructor(root,callbacks) {
     this.root=root;this.callbacks=callbacks;this.index=0;this.gallery=null;
-    root.innerHTML=`<header class="photo-header viewer-header"><button class="photo-back icon-button" data-photo-action="back" aria-label="返回图册" title="返回图册">${icon('back')}</button><div class="viewer-heading"><b class="photo-title viewer-title"></b><small class="photo-facts gallery-facts"><span class="photo-count"></span></small></div><button class="photo-reading icon-button" data-photo-action="continuous" aria-label="切换连续模式" title="切换连续模式">${icon('list')}</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页，双击或双指缩放"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 双击缩放 · 下滑返回图集</span>`;
+    root.innerHTML=`<header class="photo-header viewer-header"><button class="photo-back icon-button" data-photo-action="back" aria-label="返回图册" title="返回图册">${icon('back')}</button><div class="viewer-heading"><b class="photo-title viewer-title"></b></div><button class="photo-reading icon-button" data-photo-action="continuous" aria-label="切换连续模式" title="切换连续模式">${icon('list')}</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页，双击或双指缩放"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div><div class="photo-pagination"><span class="photo-count" role="status" aria-label="阅读页码"></span></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 双击缩放 · 下滑返回图集</span>`;
     this.track=root.querySelector('.photo-track');this.strip=root.querySelector('.photo-strip');this.gestures=new PhotoGestures(this);
     root.addEventListener('click',event=>{
       const thumbnail=event.target.closest('[data-photo-index]');
@@ -45,7 +45,7 @@ export class PhotoViewer {
       requestAnimationFrame(()=>{this.resizing=false;});
     });this.resize.observe(this.track);
   }
-  loading(immersive=false) {this.hide();this.root.hidden=false;this.root.classList.toggle('immersive',immersive);this.root.querySelector('.photo-title').textContent='照片';this.root.querySelector('.photo-facts').innerHTML='<span class="photo-count"></span>';this.track.innerHTML='<div class="loading" role="status">正在打开照片…</div>';this.track.focus({preventScroll:true});}
+  loading(immersive=false) {this.hide();this.root.hidden=false;this.root.classList.toggle('immersive',immersive);this.root.querySelector('.photo-title').textContent='照片';this.root.querySelector('.photo-count').textContent='';this.track.innerHTML='<div class="loading" role="status">正在打开照片…</div>';this.track.focus({preventScroll:true});}
   error(message) {this.track.innerHTML=`<div class="photo-error"><p>${escape(message)}</p><button class="outline-button" data-photo-action="retry">重试</button></div>`;}
   show(gallery,index,store,immersive=false) {
     const same=this.gallery?.id===gallery.id && !this.root.hidden;
@@ -70,7 +70,6 @@ export class PhotoViewer {
     if(this.immersive!==immersive)this.gestures.reset();
     this.root.classList.toggle('immersive',immersive);this.immersive=immersive;this.target=null;
     this.root.querySelector('.photo-title').textContent=gallery.title;
-    this.root.querySelector('.photo-facts').innerHTML=this.callbacks.facts?.(gallery)||'<span class="photo-count"></span>';
     const nextIndex=Math.max(0,Math.min(gallery.pages.length-1,index));
     if(this.index!==nextIndex)this.gestures.reset();
     this.index=nextIndex;

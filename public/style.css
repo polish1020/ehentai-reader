@@ -111,11 +111,9 @@ dialog{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .photo-header{display:flex;align-items:center;gap:12px;padding:10px 14px;min-height:66px;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--line)}
 .photo-header>div{flex:1;min-width:0;text-align:center}
 .photo-title{display:block;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.photo-count{display:block;font-size:11px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums}
-.photo-facts{justify-content:center;gap:3px 8px;margin-top:5px;font-size:10px}
-.photo-facts .photo-count{margin:0;font-size:inherit;color:inherit}
-.reader-top .gallery-facts{display:flex;gap:3px 8px;font-size:10px;white-space:normal}
-.photo-facts>span,.reader-top .gallery-facts>span{max-width:100%;overflow-wrap:anywhere}
+.photo-count{display:block;font-size:11px;line-height:14px;color:var(--muted);margin:0;font-variant-numeric:tabular-nums}
+.photo-count:empty{display:none}
+.photo-pagination{display:flex;justify-content:center;margin-top:4px}
 .photo-back,.photo-expand{width:42px;height:42px;font-size:31px;color:var(--green);flex-shrink:0}
 .photo-expand{font-size:23px}
 .photo-reading{min-height:42px;padding:0 5px;font-size:12px;color:var(--green);flex-shrink:0}
@@ -128,18 +126,21 @@ dialog{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .photo-slide[data-loaded=true]>span{display:none}
 .photo-slide[data-failed=true]>img{visibility:hidden}
 .photo-image-retry{position:absolute;padding:14px 18px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);font-size:12px}
-.photo-footer{padding:14px 0 18px;flex-shrink:0;background:var(--surface);border-top:1px solid var(--line)}
+.photo-footer{padding:8px 0;flex-shrink:0;background:var(--surface);border-top:1px solid var(--line)}
 .photo-strip{display:flex;gap:4px;padding:0 calc(50% - 24px);height:52px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;position:relative;align-items:center}
 .photo-film{display:block;flex:0 0 34px;height:44px;padding:0;overflow:hidden;border-radius:3px;opacity:.62;transition:opacity .15s,width .15s,flex-basis .15s}
 .photo-film[aria-current=true]{flex-basis:48px;height:52px;opacity:1;outline:2px solid var(--green);outline-offset:-2px}
 .photo-film .photo-thumb{background:var(--soft)}
 .photo-viewer.immersive{--surface:#161616;--text:#eee;--line:#555;--muted:#999;--soft:#252525;padding:0;background:#000;color:var(--text)}
-.photo-viewer.immersive .photo-header,.photo-viewer.immersive .photo-footer{display:none}
+.photo-viewer.immersive .photo-header,.photo-viewer.immersive .photo-strip{display:none}
+.photo-viewer.immersive .photo-footer{position:absolute;inset:auto 0 0;padding:0 0 calc(16px + env(safe-area-inset-bottom));background:transparent;border:0;pointer-events:none}
+.photo-viewer.immersive .photo-pagination{margin:0}
+.photo-viewer.immersive .photo-count{padding:4px 10px;border-radius:14px;background:#0007;color:#ddd}
 .photo-viewer.immersive .photo-slide>img{cursor:zoom-out}
 .photo-dismiss-hint{display:none;position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);padding:8px 13px;border-radius:20px;background:#0007;color:#ddd;white-space:nowrap;font-size:10px;pointer-events:none}
-.photo-viewer.immersive .photo-dismiss-hint{display:block}
+.photo-viewer.immersive .photo-dismiss-hint{display:block;bottom:calc(48px + env(safe-area-inset-bottom))}
 .photo-error{margin:auto;padding:30px;font-size:13px;color:var(--muted);text-align:center}
-@media(max-width:760px){.photo-album-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:0 2px 8px}.detail-dialog .gallery-summary{padding:16px}.detail-dialog .gallery-summary h2{font-size:23px}.photo-tag-panel{padding:0 16px 14px}.photo-header{gap:6px;padding:7px 6px;min-height:60px}.photo-title{font-size:12px}.photo-footer{padding:11px 0 14px}}
+@media(max-width:760px){.photo-album-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:0 2px 8px}.detail-dialog .gallery-summary{padding:16px}.detail-dialog .gallery-summary h2{font-size:23px}.photo-tag-panel{padding:0 16px 14px}.photo-header{gap:6px;padding:7px 6px;min-height:60px}.photo-title{font-size:12px}.photo-footer{padding:8px 0}}
 .reader-top [data-action=reader-mode]{font-size:12px;color:#a8c8b8}
 .detail-dialog{background:var(--bg)}
 .detail-dialog .gallery-summary h2,.detail-dialog .gallery-summary p{overflow-wrap:anywhere}
@@ -378,13 +379,7 @@ body.reading .back-to-top,body:has(dialog[open]) .back-to-top{display:none}
 .viewer-header .viewer-heading{flex:1;min-width:0;text-align:left}
 .viewer-header .album-header-actions{flex:0 0 auto}
 .viewer-header .viewer-title{display:block;font-size:13px;font-weight:500;line-height:18px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.viewer-header .gallery-facts{display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:4px;margin-top:1px;font-size:10px;line-height:14px;color:var(--muted);overflow-x:auto;scrollbar-width:none}
-.viewer-header .gallery-facts::-webkit-scrollbar{display:none}
-.viewer-header .gallery-facts>span{flex:0 0 auto;max-width:none;white-space:nowrap;overflow-wrap:normal}
-.viewer-header .gallery-facts>span:nth-child(2){flex:0 1 auto;min-width:24px;max-width:100px;overflow:hidden;text-overflow:ellipsis}
-.viewer-header .gallery-category{padding:0 6px;font-size:9px;line-height:14px}
 .viewer-header .icon-button{display:inline-grid;place-items:center;width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;font-size:14px;line-height:1;color:var(--green)}
-.viewer-header .photo-count,.viewer-header .reader-header-count{font-variant-numeric:tabular-nums;white-space:nowrap}
 .viewer-header .icon-button .ui-icon{width:22px;height:22px}
 .viewer-header .icon-button:hover{background:var(--soft)}
 @media(max-width:760px){.back-to-top{right:calc(16px + env(safe-area-inset-right));bottom:calc(88px + env(safe-area-inset-bottom))}body.searching .back-to-top{bottom:calc(20px + env(safe-area-inset-bottom))}}

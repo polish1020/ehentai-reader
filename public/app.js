@@ -69,8 +69,8 @@ function tagAttributes(tag) {
   return /^[a-f0-9]{6}$/i.test(color) ? `data-tag-highlight style="--tag-highlight:#${color}"` : '';
 }
 const pageCount = g => g.pageCount;
-function galleryFacts(gallery,counterClass='') {
-  return `<span class="gallery-category">${escape(gallery.category)}</span><span title="${escape(gallery.creator)}">${escape(gallery.creator)}</span><span>${escape(gallery.date)}</span>${counterClass?`<span class="${escape(counterClass)}"></span>`:`<span>${pageCount(gallery)} P</span>`}`;
+function galleryFacts(gallery) {
+  return `<span class="gallery-category">${escape(gallery.category)}</span><span title="${escape(gallery.creator)}">${escape(gallery.creator)}</span><span>${escape(gallery.date)}</span><span>${pageCount(gallery)} P</span>`;
 }
 
 function save() {
@@ -374,7 +374,6 @@ async function copyGalleryText(text,message) {
   else features.modal('复制图册信息',`<label class="feature-field">长按下方内容选择并复制<textarea readonly rows="8">${escape(text)}</textarea></label>`);
 }
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
-  facts:gallery=>galleryFacts(gallery,'photo-count'),
   back,
   dismiss:()=>{
     if(entry.photoOrigin==='reader')return back();
@@ -437,7 +436,7 @@ async function renderDetail(id) {
   const progress = state.progress[g.id];
   if (progress) { progress.time = Date.now(); save(); }
   detailThumbnails?.close();
-  $('#detail-body').innerHTML = `<div class="dialog-header viewer-header"><button class="photo-album-back icon-button" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="viewer-heading"><b class="viewer-title">${escape(g.title)}</b><small class="gallery-facts">${galleryFacts(g)}</small></div><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts">${galleryFacts(g)}</div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
+  $('#detail-body').innerHTML = `<div class="dialog-header viewer-header"><button class="photo-album-back icon-button" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="viewer-heading"><b class="viewer-title">${escape(g.title)}</b></div><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts">${galleryFacts(g)}</div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
   detailThumbnails = new ThumbnailView($('#detail-body').querySelector('.photo-album-grid'),$('#detail-dialog'),thumbnailStore(g));
   features.mountGallery(g,$('#detail-body'));paintFavoriteButtons($('#detail-body'));checkGalleryFavorite(g);
@@ -454,8 +453,7 @@ async function renderDetail(id) {
 }
 function record() { if (!activeGallery) return; state.progress[activeGallery.id] = {page:currentPage, time:Date.now()}; save(); updateCounter(); }
 function updateCounter() {
-  $('#page-slider').value = String(currentPage + 1); $('#page-counter').textContent = `${currentPage + 1} / ${activeGallery.pages.length}`;
-  const header=$('#reader-source .reader-header-count');if(header)header.textContent=$('#page-counter').textContent+' P';
+  $('#page-slider').value = String(currentPage + 1); $('#page-counter').textContent = `${currentPage + 1} / ${activeGallery.pages.length} P`;
   $('[data-action=prev]').disabled = currentPage === 0; $('[data-action=next]').disabled = currentPage === activeGallery.pages.length - 1;
 }
 function readerImage(page,index) {
@@ -555,7 +553,7 @@ async function openReader(id) {
   const request = ++readerRequest;
   $('#detail-dialog').close(); $('#settings-dialog').close();
   $('#reader').hidden = false; document.body.classList.add('reading'); $('.shell').inert = true; $('.sidebar').inert = true; $('.bottom-nav').inert = true;
-  $('#reader-title').textContent = '正在获取图集…'; $('#reader-source').textContent = '';
+  $('#reader-title').textContent = '正在获取图集…';
   $('[data-action=reader-mode]').innerHTML=icon('grid');
   $('#reader-content').innerHTML = '<div class="loading">正在获取图集…</div>';
   $('#page-counter').textContent = ''; $('#page-slider').disabled = true;
@@ -568,7 +566,7 @@ async function openReader(id) {
     if (request !== readerRequest || entry.screen !== 'reader' || entry.galleryId !== id) return;
     knownGalleries.set(g.id,g);
     activeGallery = g; currentPage = entry.readerRestore&&Number.isInteger(entry.readerRestore.page)?Math.max(0,Math.min(g.pages.length-1,entry.readerRestore.page)):progressFor(g); readerMode = state.mode; readerPreloader?.close(); readerPreloader = makePreloader(g);
-    $('#reader-title').textContent = g.title; $('#reader-source').innerHTML = galleryFacts(g,'reader-header-count');
+    $('#reader-title').textContent = g.title;
     $('#page-slider').disabled = false;
     for (const action of ['reader-mode']) $(`[data-action=${action}]`).disabled = false;
     $('#page-slider').max = String(g.pages.length); renderReader();
