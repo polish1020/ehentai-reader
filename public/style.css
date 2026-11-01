@@ -76,6 +76,9 @@ dialog{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .detail-dialog .dialog-header{min-height:62px;padding:calc(10px + env(safe-area-inset-top)) 20px 10px;gap:16px;background:var(--surface)}
 .detail-dialog .dialog-header>span{font-size:12px;color:var(--muted)}
 .photo-album-back{color:var(--green);font-size:17px;min-height:42px;padding:0 4px}
+.album-header-actions{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
+.album-copy-link{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:44px;padding:0 4px;color:var(--green);font-size:12px;white-space:nowrap}
+.album-copy-link .ui-icon{width:17px;height:17px}
 .detail-dialog .gallery-summary{display:block;padding:20px 20px 14px}
 .detail-dialog .gallery-summary h2{font:700 25px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:8px 0}
 .photo-tag-panel{padding:0 20px 16px}

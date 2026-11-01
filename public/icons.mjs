@@ -17,6 +17,7 @@ const paths={
   'thumb-up':'M7 10v11H3V10h4zM7 10l4-7h2v5h5a3 3 0 012.9 3.8l-2 7A3 3 0 0116 21H7',
   'thumb-down':'M7 14V3H3v11h4zM7 14l4 7h2v-5h5a3 3 0 002.9-3.8l-2-7A3 3 0 0016 3H7',
   tag:'M3 3h8l10 10-8 8L3 11V3zM7 7h.01',
+  copy:'M8 8h13v13H8zM16 8V3H3v13h5',
   top:'M5 4h14M12 20V8M7 13l5-5 5 5',
   up:'M6 14l6-6 6 6',down:'M6 10l6 6 6-6',
   trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7',

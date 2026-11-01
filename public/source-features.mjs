@@ -35,6 +35,7 @@ export class SourceFeatures {
     this.gallery=gallery;
     const tools=document.createElement('div');tools.className='gallery-tools';
     tools.innerHTML=button('community',`${icon('star')}评分与评论`)+button('downloads',`${icon('download')}下载`)+button('gallery-tags',`${icon('tag')}标签操作`);
+    tools.insertAdjacentHTML('beforeend',`<button type="button" class="outline-button" data-action="copy-gallery-diagnostics">${icon('copy')}复制排查信息</button>`);
     root.querySelector('.gallery-summary')?.after(tools);
   }
   modal(title,body) {
