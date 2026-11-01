@@ -109,6 +109,10 @@ dialog{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .photo-header>div{flex:1;min-width:0;text-align:center}
 .photo-title{display:block;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .photo-count{display:block;font-size:11px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums}
+.photo-facts{justify-content:center;gap:3px 8px;margin-top:5px;font-size:10px}
+.photo-facts .photo-count{margin:0;font-size:inherit;color:inherit}
+.reader-top .gallery-facts{display:flex;gap:3px 8px;font-size:10px;white-space:normal}
+.photo-facts>span,.reader-top .gallery-facts>span{max-width:100%;overflow-wrap:anywhere}
 .photo-back,.photo-expand{width:42px;height:42px;font-size:31px;color:var(--green);flex-shrink:0}
 .photo-expand{font-size:23px}
 .photo-reading{min-height:42px;padding:0 5px;font-size:12px;color:var(--green);flex-shrink:0}

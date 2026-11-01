@@ -69,6 +69,9 @@ function tagAttributes(tag) {
   return /^[a-f0-9]{6}$/i.test(color) ? `data-tag-highlight style="--tag-highlight:#${color}"` : '';
 }
 const pageCount = g => g.pageCount;
+function galleryFacts(gallery,photoCounter=false) {
+  return `<span class="gallery-category">${escape(gallery.category)}</span><span>${escape(gallery.creator)}</span><span>${escape(gallery.date)}</span>${photoCounter?'<span class="photo-count"></span>':`<span>${pageCount(gallery)} 张照片</span>`}`;
+}
 
 function save() {
   try { localStorage.setItem('yijing-v1', JSON.stringify(state)); }
@@ -368,6 +371,7 @@ async function copyGalleryText(text,message) {
   else features.modal('复制图册信息',`<label class="feature-field">长按下方内容选择并复制<textarea readonly rows="8">${escape(text)}</textarea></label>`);
 }
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
+  facts:gallery=>galleryFacts(gallery,true),
   back,
   dismiss:()=>{
     if(entry.photoOrigin==='reader')return back();
@@ -430,7 +434,7 @@ async function renderDetail(id) {
   const progress = state.progress[g.id];
   if (progress) { progress.time = Date.now(); save(); }
   detailThumbnails?.close();
-  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts"><span class="gallery-category">${escape(g.category)}</span><span>${escape(g.creator)}</span><span>${escape(g.date)}</span><span>${pageCount(g)} 张照片</span></div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><details class="gallery-tags photo-tag-panel" ${entry.tagsOpen ? 'open' : ''}><summary>标签 · ${g.tags.length}<span>按标签查找相关图集</span></summary><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></details><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
+  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts">${galleryFacts(g)}</div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><details class="gallery-tags photo-tag-panel" ${entry.tagsOpen ? 'open' : ''}><summary>标签 · ${g.tags.length}<span>按标签查找相关图集</span></summary><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></details><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
   detailThumbnails = new ThumbnailView($('#detail-body').querySelector('.photo-album-grid'),$('#detail-dialog'),thumbnailStore(g));
   features.mountGallery(g,$('#detail-body'));paintFavoriteButtons($('#detail-body'));checkGalleryFavorite(g);
@@ -559,7 +563,7 @@ async function openReader(id) {
     if (request !== readerRequest || entry.screen !== 'reader' || entry.galleryId !== id) return;
     knownGalleries.set(g.id,g);
     activeGallery = g; currentPage = entry.readerRestore&&Number.isInteger(entry.readerRestore.page)?Math.max(0,Math.min(g.pages.length-1,entry.readerRestore.page)):progressFor(g); readerMode = state.mode; readerPreloader?.close(); readerPreloader = makePreloader(g);
-    $('#reader-title').textContent = g.title; $('#reader-source').textContent = g.category;
+    $('#reader-title').textContent = g.title; $('#reader-source').innerHTML = galleryFacts(g);
     $('#page-slider').disabled = false;
     for (const action of ['reader-mode','reader-favorite']) $(`[data-action=${action}]`).disabled = false;
     $('#page-slider').max = String(g.pages.length); updateReaderFavorite(); renderReader();
