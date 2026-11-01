@@ -4,6 +4,7 @@ import {ListStore} from './navigation.mjs';
 import {ReaderPreloader,preloadNeighbors} from './reader-preload.mjs';
 import {ThumbnailStore,ThumbnailView} from './photo-thumbnails.mjs';
 import {PhotoViewer} from './photo-viewer.mjs';
+import {BackgroundScrollLock} from './scroll-lock.mjs';
 import {discoveryPage} from './discovery.mjs';
 import {Favorites,favoriteMatches} from './favorites.mjs';
 import {InfiniteList} from './list-loader.mjs';
@@ -19,6 +20,7 @@ document.addEventListener('pointerdown',() => { delete document.documentElement.
 // Keep this local so an older cached source module can still load during updates.
 const errorMessage=value=>String(value||'请求失败，请稍后重试').replace(/(?:E-Hentai|ExHentai)(?:\s+|(?=[:：]|$))/gi,'').trim()||'请求失败，请稍后重试';
 const $ = selector => document.querySelector(selector);
+const backgroundScroll = new BackgroundScrollLock();
 const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const names = {discover:'发现', favorites:'收藏', history:'足迹', library:'全部图集'};
 const pageNames={...names,search:'搜索'};
@@ -353,11 +355,13 @@ const photoViewer = new PhotoViewer($('#photo-viewer'),{
 });
 async function openPhotos(id,index=0,immersive=false) {
   const request = ++photoRequest;
+  // Cover the list before waiting for the private image-cache context.
+  if (photoViewer.gallery?.id !== id || $('#photo-viewer').hidden) photoViewer.loading(immersive);
   $('#detail-dialog').close();$('#settings-dialog').close();
   document.body.classList.add('reading');$('.shell').inert = true;$('.sidebar').inert = true;$('.bottom-nav').inert = true;
   try {
     let gallery = knownGalleries.get(id);
-    if (!gallery) { photoViewer.loading();const reference=galleryReference(id);gallery = await getGallery(reference.gid,reference.token,reference.source);knownGalleries.set(id,gallery); }
+    if (!gallery) { const reference=galleryReference(id);gallery = await getGallery(reference.gid,reference.token,reference.source);knownGalleries.set(id,gallery); }
     if (request !== photoRequest || !['photo','photo-full'].includes(entry.screen) || entry.galleryId !== id) return;
     if (gallery.source === 'exhentai') await sendImageContext();
     if (request !== photoRequest) return;
@@ -538,7 +542,7 @@ function goPage(page) {
 }
 function remember() {
   if (!list || !entry) return;
-  if (!restoringScroll && !document.body.classList.contains('reading')) list.scrollY = window.scrollY;
+  if (!restoringScroll && !backgroundScroll.locked && !document.body.classList.contains('reading')) list.scrollY = window.scrollY;
   if (entry.screen==='reader'&&activeGallery) {const content=$('#reader-content'),anchor=content.querySelector(`[data-index="${currentPage}"]`);entry.readerPage=currentPage;entry.readerOffset=anchor?content.scrollTop-anchor.offsetTop:0;}
   if ($('#detail-dialog').open) { entry.detailScroll = $('#detail-dialog').scrollTop;entry.tagsOpen = !!$('#detail-dialog').querySelector('.photo-tag-panel')?.open; }
   history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source,feed:list.feed,filters:list.filters,searchOrigin:list.searchOrigin,searchScope:list.searchScope,searchFeed:list.searchFeed}},'');
@@ -548,7 +552,7 @@ function restoreScroll() {
   const target = list, y = target.scrollY;
   restoringScroll = true;
   requestAnimationFrame(() => {
-    if (target === list && entry.screen !== 'reader') {window.scrollTo({top:y,behavior:'instant'});updateBackToTop();}
+    if (target === list && entry.screen !== 'reader' && !backgroundScroll.locked) {window.scrollTo({top:y,behavior:'instant'});updateBackToTop();}
     requestAnimationFrame(() => { restoringScroll = false;listLoader.check(); });
   });
 }
@@ -664,7 +668,7 @@ function updateBackToTop() {
 window.addEventListener('resize',updateBackToTop);
 window.addEventListener('scroll',() => {
   updateBackToTop();
-  if (restoringScroll || entry?.screen !== 'list') return;
+  if (restoringScroll || backgroundScroll.locked || entry?.screen !== 'list') return;
   list.scrollY = window.scrollY;
   clearTimeout(scrollTimer); scrollTimer = setTimeout(remember,150);
 },{passive:true});

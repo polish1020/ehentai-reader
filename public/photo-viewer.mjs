@@ -46,7 +46,7 @@ export class PhotoViewer {
       requestAnimationFrame(()=>{this.resizing=false;});
     });this.resize.observe(this.track);
   }
-  loading() {this.hide();this.root.hidden=false;this.root.classList.remove('immersive');this.root.querySelector('.photo-title').textContent='照片';this.root.querySelector('.photo-count').textContent='';this.track.innerHTML='<div class="loading">正在打开照片…</div>';}
+  loading(immersive=false) {this.hide();this.root.hidden=false;this.root.classList.toggle('immersive',immersive);this.root.querySelector('.photo-title').textContent='照片';this.root.querySelector('.photo-count').textContent='';this.track.innerHTML='<div class="loading" role="status">正在打开照片…</div>';this.track.focus({preventScroll:true});}
   error(message) {this.track.innerHTML=`<div class="photo-error"><p>${escape(message)}</p><button class="outline-button" data-photo-action="retry">重试</button></div>`;}
   show(gallery,index,store,immersive=false) {
     const same=this.gallery?.id===gallery.id && !this.root.hidden;
