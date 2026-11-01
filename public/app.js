@@ -69,8 +69,8 @@ function tagAttributes(tag) {
   return /^[a-f0-9]{6}$/i.test(color) ? `data-tag-highlight style="--tag-highlight:#${color}"` : '';
 }
 const pageCount = g => g.pageCount;
-function galleryFacts(gallery,photoCounter=false) {
-  return `<span class="gallery-category">${escape(gallery.category)}</span><span>${escape(gallery.creator)}</span><span>${escape(gallery.date)}</span>${photoCounter?'<span class="photo-count"></span>':`<span>${pageCount(gallery)} 张照片</span>`}`;
+function galleryFacts(gallery,counterClass='') {
+  return `<span class="gallery-category">${escape(gallery.category)}</span><span title="${escape(gallery.creator)}">${escape(gallery.creator)}</span><span>${escape(gallery.date)}</span>${counterClass?`<span class="${escape(counterClass)}"></span>`:`<span>${pageCount(gallery)} P</span>`}`;
 }
 
 function save() {
@@ -95,7 +95,6 @@ function updateFavorites() {
     target.remoteFavoriteIds=target.galleries.filter(gallery=>favorites.remote(gallery.id)).map(gallery=>gallery.id);
   }
   paintFavoriteButtons();
-  if(activeGallery)updateReaderFavorite();
   if(entry?.screen==='list'){renderResults();remember();}
 }
 function paintFavoriteButtons(root=document) {
@@ -371,7 +370,7 @@ async function copyGalleryText(text,message) {
   else features.modal('复制图册信息',`<label class="feature-field">长按下方内容选择并复制<textarea readonly rows="8">${escape(text)}</textarea></label>`);
 }
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
-  facts:gallery=>galleryFacts(gallery,true),
+  facts:gallery=>galleryFacts(gallery,'photo-count'),
   back,
   dismiss:()=>{
     if(entry.photoOrigin==='reader')return back();
@@ -434,7 +433,7 @@ async function renderDetail(id) {
   const progress = state.progress[g.id];
   if (progress) { progress.time = Date.now(); save(); }
   detailThumbnails?.close();
-  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts">${galleryFacts(g)}</div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><details class="gallery-tags photo-tag-panel" ${entry.tagsOpen ? 'open' : ''}><summary>标签 · ${g.tags.length}<span>按标签查找相关图集</span></summary><div class="card-tags">${g.tags.map(tag => `<button class="chip" data-search-tag="${escape(tag)}">${escape(tag)}</button>`).join('')}</div></details><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
+  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts">${galleryFacts(g)}</div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
   detailThumbnails = new ThumbnailView($('#detail-body').querySelector('.photo-album-grid'),$('#detail-dialog'),thumbnailStore(g));
   features.mountGallery(g,$('#detail-body'));paintFavoriteButtons($('#detail-body'));checkGalleryFavorite(g);
@@ -452,9 +451,9 @@ async function renderDetail(id) {
 function record() { if (!activeGallery) return; state.progress[activeGallery.id] = {page:currentPage, time:Date.now()}; save(); updateCounter(); }
 function updateCounter() {
   $('#page-slider').value = String(currentPage + 1); $('#page-counter').textContent = `${currentPage + 1} / ${activeGallery.pages.length}`;
+  const header=$('#reader-source .reader-header-count');if(header)header.textContent=$('#page-counter').textContent+' P';
   $('[data-action=prev]').disabled = currentPage === 0; $('[data-action=next]').disabled = currentPage === activeGallery.pages.length - 1;
 }
-function updateReaderFavorite() { const button=$('#reader-favorite');button.dataset.favorite=activeGallery.id;paintFavoriteButtons($('#reader')); }
 function readerImage(page,index) {
   const dimensions = readerPreloader?.loaded.get(index) || page;
   return `<div class="reader-page" data-index="${index}" style="aspect-ratio:${dimensions.width || 600}/${dimensions.height || 800}"><span class="reader-placeholder" aria-hidden="true">第 ${index+1} 页</span><img data-src="${escape(page.src)}" alt="${escape(page.alt || `${activeGallery.title} · 第 ${index+1} 页`)}" data-page="${index}" decoding="async" draggable="false" width="${dimensions.width || 600}" height="${dimensions.height || 800}"></div>`;
@@ -522,8 +521,9 @@ function renderReader() {
   const selected = content.querySelector(`[data-index="${currentPage}"]`);
   content.scrollTop = readerMode === 'scroll' && selected ? selected.offsetTop : 0;
   updatePreloadWindow();activateVisibleImages();
-  $('[data-action=reader-mode]').textContent = readerMode === 'paged' ? '连续' : '照片';
-  $('[data-action=reader-mode]').setAttribute('aria-label',readerMode === 'paged' ? '切换纵向滚动' : '切换横向照片浏览');
+  $('[data-action=reader-mode]').innerHTML = icon(readerMode === 'paged' ? 'list' : 'grid');
+  const modeLabel=readerMode==='paged'?'切换连续模式':'切换照片模式';
+  $('[data-action=reader-mode]').setAttribute('aria-label',modeLabel);$('[data-action=reader-mode]').title=modeLabel;
   record();
 }
 $('#reader-content').addEventListener('scroll',()=>{
@@ -552,9 +552,10 @@ async function openReader(id) {
   $('#detail-dialog').close(); $('#settings-dialog').close();
   $('#reader').hidden = false; document.body.classList.add('reading'); $('.shell').inert = true; $('.sidebar').inert = true; $('.bottom-nav').inert = true;
   $('#reader-title').textContent = '正在获取图集…'; $('#reader-source').textContent = '';
+  $('[data-action=reader-mode]').innerHTML=icon('grid');
   $('#reader-content').innerHTML = '<div class="loading">正在获取图集…</div>';
   $('#page-counter').textContent = ''; $('#page-slider').disabled = true;
-  for (const action of ['prev','next','reader-mode','reader-favorite']) $(`[data-action=${action}]`).disabled = true;
+  for (const action of ['prev','next','reader-mode']) $(`[data-action=${action}]`).disabled = true;
   $('[data-action=exit-reader]').focus({preventScroll:true});
   try {
     const {gid,token,source} = galleryReference(id);
@@ -563,10 +564,10 @@ async function openReader(id) {
     if (request !== readerRequest || entry.screen !== 'reader' || entry.galleryId !== id) return;
     knownGalleries.set(g.id,g);
     activeGallery = g; currentPage = entry.readerRestore&&Number.isInteger(entry.readerRestore.page)?Math.max(0,Math.min(g.pages.length-1,entry.readerRestore.page)):progressFor(g); readerMode = state.mode; readerPreloader?.close(); readerPreloader = makePreloader(g);
-    $('#reader-title').textContent = g.title; $('#reader-source').innerHTML = galleryFacts(g);
+    $('#reader-title').textContent = g.title; $('#reader-source').innerHTML = galleryFacts(g,'reader-header-count');
     $('#page-slider').disabled = false;
-    for (const action of ['reader-mode','reader-favorite']) $(`[data-action=${action}]`).disabled = false;
-    $('#page-slider').max = String(g.pages.length); updateReaderFavorite(); renderReader();
+    for (const action of ['reader-mode']) $(`[data-action=${action}]`).disabled = false;
+    $('#page-slider').max = String(g.pages.length); renderReader();
     if(entry.readerRestore){$('#reader-content').scrollTop+=Number(entry.readerRestore.offset)||0;delete entry.readerRestore;remember();}
   } catch (error) {
     if (request !== readerRequest || entry.screen !== 'reader' || entry.galleryId !== id) return;
@@ -583,11 +584,16 @@ function goPage(page) {
   if (readerMode === 'scroll') { const box = $('#reader-content').querySelector(`[data-index="${currentPage}"]`); updatePreloadWindow(); if (box) $('#reader-content').scrollTo({top:box.offsetTop,behavior:'instant'}); record(); }
   else renderReader();
 }
+function zoomReaderPhoto(index=currentPage) {
+  if(!activeGallery)return;
+  entry.readerZoomIndex=Math.max(0,Math.min(activeGallery.pages.length-1,index));
+  navigate('photo-full',list,activeGallery.id,{photoIndex:entry.readerZoomIndex,photoOrigin:'reader'});
+}
 function remember() {
   if (!list || !entry) return;
   if (!restoringScroll && !backgroundScroll.locked && !document.body.classList.contains('reading')) list.scrollY = window.scrollY;
   if (entry.screen==='reader'&&activeGallery) {const content=$('#reader-content'),anchor=content.querySelector(`[data-index="${currentPage}"]`);entry.readerPage=currentPage;entry.readerOffset=anchor?content.scrollTop-anchor.offsetTop:0;}
-  if ($('#detail-dialog').open) { entry.detailScroll = $('#detail-dialog').scrollTop;entry.tagsOpen = !!$('#detail-dialog').querySelector('.photo-tag-panel')?.open; }
+  if ($('#detail-dialog').open) { entry.detailScroll = $('#detail-dialog').scrollTop; }
   history.replaceState({...entry,fallback:{view:list.view,query:list.query,sort:list.sort,listMode:list.listMode,source:list.source,feed:list.feed,filters:list.filters,searchOrigin:list.searchOrigin,searchScope:list.searchScope,searchFeed:list.searchFeed}},'');
   lists.save();
 }
@@ -889,7 +895,7 @@ document.addEventListener('click', event => {
     'load-more':() => loadGalleries(true), 'retry-list':() => loadGalleries(list.pendingAppend), 'retry-reader':() => openReader(entry.galleryId),
     'search-back':back,settings, 'close-settings':() => $('#settings-dialog').close(), 'close-detail':back,
     'exit-reader':back, 'reader-mode':() => { if (readerMode === 'scroll') navigate('photo',list,activeGallery.id,{replace:true,photoIndex:currentPage}); else { readerMode = 'scroll';state.mode = 'scroll';save();renderReader(); } },
-    'reader-favorite':() => favorite(activeGallery.id), prev:() => goPage(currentPage - 1), next:() => goPage(currentPage + 1),
+    prev:() => goPage(currentPage - 1), next:() => goPage(currentPage + 1),
     view:() => { remember(); list.listMode = !list.listMode; render(); restoreScroll(); remember(); }, 'clear-history':() => { if (confirm('清除这台设备上的全部阅读记录？收藏会保留。')) { state.progress = {}; save(); renderResults(); remember(); toast('已清除阅读记录'); } }
   }; actions[button.dataset.action]?.();
 });
@@ -934,7 +940,7 @@ $('#reader-content').addEventListener('touchend', event => {
 }, {passive:true});
 $('#reader-content').addEventListener('click', event => {
   if (!activeGallery || event.target.tagName !== 'IMG') return;
-  if(readerMode==='scroll'){entry.readerZoomIndex=Number(event.target.dataset.page);return navigate('photo-full',list,activeGallery.id,{photoIndex:entry.readerZoomIndex,photoOrigin:'reader'});}
+  if(readerMode==='scroll')return zoomReaderPhoto(Number(event.target.dataset.page));
   if(readerMode!=='paged')return;
   const x = event.clientX / innerWidth;
   if (x < .25 || x > .75) goPage(currentPage + (x > .75 ? 1 : -1) * (state.direction === 'rtl' ? -1 : 1));

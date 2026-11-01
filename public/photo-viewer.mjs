@@ -7,7 +7,7 @@ const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 export class PhotoViewer {
   constructor(root,callbacks) {
     this.root=root;this.callbacks=callbacks;this.index=0;this.gallery=null;
-    root.innerHTML=`<header class="photo-header"><button class="photo-back" data-photo-action="back" aria-label="返回图集">${icon('back')}</button><div><b class="photo-title"></b><small class="photo-facts gallery-facts"><span class="photo-count"></span></small></div><button class="photo-reading" data-photo-action="continuous" aria-label="切换上下连续阅读">连续</button><button class="photo-expand" data-photo-action="fullscreen" aria-label="全屏查看">${icon('expand')}</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页，双击或双指缩放"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 双击缩放 · 下滑返回图集</span>`;
+    root.innerHTML=`<header class="photo-header viewer-header"><button class="photo-back icon-button" data-photo-action="back" aria-label="返回图册" title="返回图册">${icon('back')}</button><div><b class="photo-title viewer-title"></b><small class="photo-facts gallery-facts"><span class="photo-count"></span></small></div><button class="photo-reading icon-button" data-photo-action="continuous" aria-label="切换连续模式" title="切换连续模式">${icon('list')}</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页，双击或双指缩放"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 双击缩放 · 下滑返回图集</span>`;
     this.track=root.querySelector('.photo-track');this.strip=root.querySelector('.photo-strip');this.gestures=new PhotoGestures(this);
     root.addEventListener('click',event=>{
       const thumbnail=event.target.closest('[data-photo-index]');
@@ -15,7 +15,6 @@ export class PhotoViewer {
       const action=event.target.closest('[data-photo-action]')?.dataset.photoAction;
       if(action==='continuous')return callbacks.continuous();
       if(action==='back')return callbacks.back();
-      if(action==='fullscreen')return callbacks.fullscreen();
       if(action==='retry')return callbacks.retry();
       const retry=event.target.closest('[data-photo-retry]');
       if(retry){const image=this.track.querySelector(`[data-photo-image="${retry.dataset.photoRetry}"]`);const url=new URL(image.dataset.src,location.origin);url.searchParams.set('retry',String(Date.now()));image.src=url.href;retry.remove();return;}
@@ -88,7 +87,7 @@ export class PhotoViewer {
     this.index=index;this.activate(index);
     for(const page of preloadNeighbors(index,this.gallery.pages.length))if(this.preloader.loaded.has(page))this.activate(page);
     this.preloader.update(index);
-    this.root.querySelector('.photo-count').textContent=`${index+1} / ${this.gallery.pages.length}`;
+    this.root.querySelector('.photo-count').textContent=`${index+1} / ${this.gallery.pages.length} P`;
     const selected=this.strip.children[index];
     const previous=this.strip.querySelector('[aria-current="true"]');
     if(previous && previous!==selected)previous.setAttribute('aria-current','false');

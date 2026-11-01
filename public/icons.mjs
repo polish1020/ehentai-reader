@@ -33,7 +33,7 @@ const actions={'close-settings':'close','close-detail':'back','exit-reader':'bac
 export function decorateIcons(root=document) {
   root.querySelectorAll('button[data-action],button[data-favorite]').forEach(button=>{
     if(button.hasAttribute('data-favorite')){
-      const busy=button.getAttribute('aria-busy')==='true',compact=button.classList.contains('favorite-button')||button.id==='reader-favorite';
+      const busy=button.getAttribute('aria-busy')==='true',compact=button.classList.contains('favorite-button');
       const label=button.dataset.favoriteLabel||(button.getAttribute('aria-pressed')==='true'?'已收藏':'收藏图集');
       const signature=`favorite:${busy}:${compact?'':label}`;
       if(button.dataset.icon!==signature){button.innerHTML=(busy?'<span class="loading-spinner" aria-hidden="true"></span>':icon('heart'))+(compact?'':`<span>${label}</span>`);button.dataset.icon=signature;}

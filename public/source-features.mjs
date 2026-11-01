@@ -33,11 +33,12 @@ export class SourceFeatures {
   }
   mountGallery(gallery,root) {
     this.gallery=gallery;
-    root.querySelector('.album-header-actions').innerHTML=`<button type="button" class="album-header-button" data-feature="community" aria-label="评分与评论">${icon('comment')}评论</button><details class="album-menu"><summary aria-label="更多图册操作" title="更多操作">${icon('more')}</summary><div class="album-menu-panel"><button type="button" data-feature="downloads">${icon('download')}下载</button><button type="button" data-feature="gallery-tags">${icon('tag')}标签操作</button><button type="button" data-action="copy-gallery-link">${icon('copy')}复制图册链接</button><button type="button" data-action="gallery-debug">${icon('info')}查看调试信息</button></div></details>`;
+    root.querySelector('.album-header-actions').innerHTML=`<button type="button" class="album-header-button" data-feature="gallery-tag-list" aria-label="查看图册标签">${icon('tag')}标签</button><details class="album-menu"><summary aria-label="更多图册操作" title="更多操作">${icon('more')}</summary><div class="album-menu-panel"><button type="button" data-feature="community">${icon('comment')}评分与评论</button><button type="button" data-feature="downloads">${icon('download')}下载</button><button type="button" data-feature="gallery-tags">${icon('tag')}标签操作</button><button type="button" data-action="copy-gallery-link">${icon('copy')}复制图册链接</button><button type="button" data-action="gallery-debug">${icon('info')}查看调试信息</button></div></details>`;
   }
-  modal(title,body) {
+  modal(title,body,{sheet=false}={}) {
     this.clearImageExport();
     this.sequence++;
+    this.dialog.classList.toggle('tag-sheet',sheet);
     this.dialog.innerHTML=`<div class="dialog-header"><h2>${esc(title)}</h2><button type="button" class="icon-button" data-feature="close" aria-label="关闭">${icon('close')}</button></div><div class="feature-body">${body}<p class="feature-status" role="status"></p></div>`;
     if(!this.dialog.open)this.dialog.showModal();this.dialog.scrollTop=0;
     return this.sequence;
@@ -77,6 +78,7 @@ export class SourceFeatures {
       return;
     }
     if(action==='community')return this.openCommunity();
+    if(action==='gallery-tag-list')return this.openGalleryTagList();
     if(action==='gallery-favorite')return this.openFavorite();
     if(action==='gallery-tags')return this.openGalleryTags();
     if(action==='downloads')return this.openDownloads();
@@ -110,6 +112,10 @@ export class SourceFeatures {
     const result=await this.get('tags',null,{set});if(sequence!==this.sequence)return;
     this.tags=result;this.onPreferences(result.tags);this.tagSynced=true;
     this.modal('标签偏好',`<label class="feature-field">标签集<select data-feature-select="tag-set">${(result.sets.length?result.sets:[{id:1,name:'默认标签集'}]).map(item=>`<option value="${item.id}" ${item.id===set?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label><form data-feature-form="tag" class="feature-form"><input type="hidden" name="id">${field('tag','完整标签','','text','placeholder="artist:作者名 / language:chinese" required') }<div class="feature-columns">${field('weight','权重',10,'number','min="-99" max="99"')}${field('color','高亮颜色','','text','placeholder="RRGGBB（选填）" pattern="#?[a-fA-F0-9]{6}"')}</div><div class="feature-columns"><label><input name="watch" type="checkbox" checked> 关注</label><label><input name="hidden" type="checkbox"> 屏蔽</label></div><button class="primary-button" type="submit">保存</button></form><div class="tag-preference-list">${result.tags.map(tag=>`<article><div><b>${esc(tag.tag)}</b><small>${tag.watch?'已关注 · ':''}${tag.hidden?'已屏蔽 · ':''}权重 ${tag.weight}</small></div>${button('tag-edit','编辑',`data-id="${tag.id}"`)}${button('tag-delete','删除',`data-id="${tag.id}"`)}</article>`).join('')||'<p class="feature-note">当前标签集还没有标签。</p>'}</div>`);
+  }
+  openGalleryTagList() {
+    const tags=this.gallery.tags||[];
+    this.modal(`图册标签 · ${tags.length}`,`<div class="gallery-tag-list chips">${tags.map(tag=>`<button type="button" class="chip" data-search-tag="${esc(tag)}">${esc(tag)}</button>`).join('')||'<p class="feature-note">这个图册暂无标签。</p>'}</div>`,{sheet:true});
   }
   async openCommunity() {
     const gallery=this.gallery,sequence=this.modal('评分与评论','<p class="loading">正在读取评论…</p>');
