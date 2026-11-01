@@ -33,7 +33,7 @@ export class SourceFeatures {
   }
   mountGallery(gallery,root) {
     this.gallery=gallery;
-    root.querySelector('.album-header-actions').innerHTML=`<button type="button" class="album-header-button" data-feature="gallery-tag-list" aria-label="查看图册标签">${icon('tag')}标签</button><details class="album-menu"><summary aria-label="更多图册操作" title="更多操作">${icon('more')}</summary><div class="album-menu-panel"><button type="button" data-feature="community">${icon('comment')}评分与评论</button><button type="button" data-feature="downloads">${icon('download')}下载</button><button type="button" data-feature="gallery-tags">${icon('tag')}标签操作</button><button type="button" data-action="copy-gallery-link">${icon('copy')}复制图册链接</button><button type="button" data-action="gallery-debug">${icon('info')}查看调试信息</button></div></details>`;
+    root.querySelector('.album-header-actions').innerHTML=`<details class="album-menu"><summary aria-label="更多图册操作" title="更多操作">${icon('more')}</summary><div class="album-menu-panel"><button type="button" data-feature="gallery-tag-list" aria-label="查看图册标签">${icon('tag')}图册标签</button><button type="button" data-feature="community">${icon('comment')}评分与评论</button><button type="button" data-feature="downloads">${icon('download')}下载</button><button type="button" data-feature="gallery-tags">${icon('tag')}标签操作</button><button type="button" data-action="copy-gallery-link">${icon('copy')}复制图册链接</button><button type="button" data-action="gallery-debug">${icon('info')}查看调试信息</button></div></details>`;
   }
   modal(title,body,{sheet=false}={}) {
     this.clearImageExport();
