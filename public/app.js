@@ -47,7 +47,7 @@ const favoriteCollection=target=>collectionView(target)==='favorites';
 const localCollection = target => collectionView(target)==='history';
 const searchReady = target => !!searchOptions(target.query,target.filters).query || Object.entries(target.filters||{}).some(([key,value])=>key!=='favcat'&&!!value);
 const knownGalleries = new Map(), thumbnailStores = new Map();
-const favoriteChecks=new Map();
+const favoriteChecks=new Map(),favoriteChecksWithoutAccount=new Set();
 let detailThumbnails, photoRequest = 0;
 let session;
 try { session = sessionStorage; } catch { /* Keep navigation in memory. */ }
@@ -111,7 +111,10 @@ function paintFavoriteButtons(root=document) {
   decorateIcons(root);
 }
 async function checkGalleryFavorite(gallery) {
-  const token=Symbol(),id=gallery.id;favoriteChecks.set(id,token);paintFavoriteButtons();
+  const id=gallery.id;
+  // Reuse the current account's result before checking the session or showing loading.
+  if(favorites.statusKnown(id)||favoriteChecks.has(id)||(!exSession.scope&&favoriteChecksWithoutAccount.has(id)))return;
+  const token=Symbol();favoriteChecks.set(id,token);paintFavoriteButtons();
   try {
     await refreshExSession();
     const scope=exSession.scope;
@@ -119,6 +122,7 @@ async function checkGalleryFavorite(gallery) {
       const info=await requestJSON('/api/source?'+new URLSearchParams({action:'favorite-info',source:gallery.source,gid:gallery.gid,token:gallery.token}));
       if(favoriteChecks.get(id)===token)favorites.confirm(gallery,info,scope);
     }
+    if(!scope&&favoriteChecks.get(id)===token)favoriteChecksWithoutAccount.add(id);
   }catch{ /* Keep the last confirmed state; saving will report any source failure. */ }
   finally{if(favoriteChecks.get(id)===token)favoriteChecks.delete(id);paintFavoriteButtons();}
 }
@@ -433,7 +437,7 @@ async function renderDetail(id) {
   const progress = state.progress[g.id];
   if (progress) { progress.time = Date.now(); save(); }
   detailThumbnails?.close();
-  $('#detail-body').innerHTML = `<div class="dialog-header"><button class="photo-album-back" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts">${galleryFacts(g)}</div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
+  $('#detail-body').innerHTML = `<div class="dialog-header viewer-header"><button class="photo-album-back icon-button" data-action="close-detail" aria-label="返回图集列表">‹ 图集</button><div class="viewer-heading"><b class="viewer-title">${escape(g.title)}</b><small class="gallery-facts">${galleryFacts(g)}</small></div><div class="album-header-actions"></div></div><div class="gallery-summary"><div class="gallery-summary-copy"><h2>${escape(g.title)}</h2><div class="gallery-facts">${galleryFacts(g)}</div>${g.description && g.description !== g.title ? `<p>${escape(g.description)}</p>` : ''}</div></div><div class="photo-album-grid">${Array.from({length:pageCount(g)},(_,index)=>`<button class="photo-tile" data-open-photo="${index}" aria-label="放大第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"><span class="thumb-page">${index+1}</span></span></button>`).join('')}</div><div class="gallery-actions"><button class="primary-button" data-read="${escape(g.id)}">${state.progress[g.id] ? `继续阅读 · 第 ${progressFor(g)+1} 页` : '连续阅读'} <span>→</span></button><button class="outline-button" data-favorite="${escape(g.id)}" aria-pressed="${favorites.has(g.id)}" ${favorites.busy(g.id)?'disabled':''}>${favorites.has(g.id) ? '♥ 已收藏' : '♡ 收藏图集'}</button></div>`;
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
   detailThumbnails = new ThumbnailView($('#detail-body').querySelector('.photo-album-grid'),$('#detail-dialog'),thumbnailStore(g));
   features.mountGallery(g,$('#detail-body'));paintFavoriteButtons($('#detail-body'));checkGalleryFavorite(g);
@@ -773,6 +777,7 @@ function updateSourceSettings() {
   $('#ex-session-status').textContent = exSession.configured ? '凭证已保存在本机，关闭浏览器后仍可使用。可以切换到 ExHentai。' : '尚未保存凭证，请输入后验证。';
 }
 function purgeExLists() {
+  favoriteChecks.clear();favoriteChecksWithoutAccount.clear();
   state.searchHistory=state.searchHistory.filter(item=>item.source!=='exhentai'&&item.scope!=='favorites');save();
   features.clearPrivate();
   for (const target of lists.lists.values()) if (target.source === 'exhentai' || accountList(target)) target.requestId = (target.requestId || 0) + 1;

@@ -375,7 +375,8 @@ body.reading .back-to-top,body:has(dialog[open]) .back-to-top{display:none}
 .reader{background:var(--bg)}
 .detail-dialog .dialog-header{height:calc(var(--navigation-height) + env(safe-area-inset-top));min-height:calc(var(--navigation-height) + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}
 .detail-dialog .dialog-header .photo-album-back,.detail-dialog .dialog-header .album-header-button{height:44px;min-height:44px}
-.viewer-header>div{flex:1;min-width:0;text-align:left}
+.viewer-header .viewer-heading{flex:1;min-width:0;text-align:left}
+.viewer-header .album-header-actions{flex:0 0 auto}
 .viewer-header .viewer-title{display:block;font-size:13px;font-weight:500;line-height:18px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .viewer-header .gallery-facts{display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:4px;margin-top:1px;font-size:10px;line-height:14px;color:var(--muted);overflow-x:auto;scrollbar-width:none}
 .viewer-header .gallery-facts::-webkit-scrollbar{display:none}
