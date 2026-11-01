@@ -33,10 +33,7 @@ export class SourceFeatures {
   }
   mountGallery(gallery,root) {
     this.gallery=gallery;
-    const tools=document.createElement('div');tools.className='gallery-tools';
-    tools.innerHTML=button('community',`${icon('star')}评分与评论`)+button('downloads',`${icon('download')}下载`)+button('gallery-tags',`${icon('tag')}标签操作`);
-    tools.insertAdjacentHTML('beforeend',`<button type="button" class="outline-button" data-action="copy-gallery-diagnostics">${icon('copy')}复制排查信息</button>`);
-    root.querySelector('.gallery-summary')?.after(tools);
+    root.querySelector('.album-header-actions').innerHTML=`<button type="button" class="album-header-button" data-feature="community" aria-label="评分与评论">${icon('comment')}评论</button><details class="album-menu"><summary aria-label="更多图册操作" title="更多操作">${icon('more')}</summary><div class="album-menu-panel"><button type="button" data-feature="downloads">${icon('download')}下载</button><button type="button" data-feature="gallery-tags">${icon('tag')}标签操作</button><button type="button" data-action="copy-gallery-link">${icon('copy')}复制图册链接</button><button type="button" data-action="gallery-debug">${icon('info')}查看调试信息</button></div></details>`;
   }
   modal(title,body) {
     this.clearImageExport();
