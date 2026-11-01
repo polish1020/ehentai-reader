@@ -369,7 +369,7 @@ body.searching main{padding-top:8px}
 .back-to-top{position:fixed;right:calc(24px + env(safe-area-inset-right));bottom:calc(24px + env(safe-area-inset-bottom));z-index:28;width:44px;height:44px;color:var(--green);background:var(--surface);border:1px solid var(--line);box-shadow:0 4px 16px #0002}
 body.reading .back-to-top,body:has(dialog[open]) .back-to-top{display:none}
 :root{--navigation-height:87px}
-@media(max-width:760px){:root{--navigation-height:66px}}
+@media(max-width:760px){:root{--navigation-height:54px}}
 .topbar{height:calc(var(--navigation-height) + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}
 .detail-dialog .dialog-header,.reader-top.viewer-header,.photo-header.viewer-header{display:flex;align-items:center;gap:6px;height:var(--navigation-height);min-height:var(--navigation-height);padding:0 8px;flex-shrink:0;background:var(--bg);color:var(--text);border-bottom:0;box-shadow:inset 0 -1px var(--line)}
 .reader{background:var(--bg)}
