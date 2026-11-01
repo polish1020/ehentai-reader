@@ -90,7 +90,6 @@ dialog{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .album-menu-panel{max-height:calc(100dvh - 100px);overflow-y:auto;overscroll-behavior:contain}
 .gallery-tag-list{gap:8px}
 .gallery-tag-list .chip{white-space:normal;overflow-wrap:anywhere;text-align:left;line-height:1.6}
-@media(max-width:760px){.feature-dialog.tag-sheet{inset:auto 0 0;margin:0;width:100vw;max-width:100vw;max-height:75dvh;border-radius:18px 18px 0 0;padding-bottom:env(safe-area-inset-bottom);border-bottom:0}}
 .album-menu-panel .ui-icon{width:18px;height:18px;color:var(--green)}
 .gallery-debug-data{font-size:16px!important;line-height:1.5}
 .toast{top:auto;right:auto;margin:0;border:0;width:max-content;pointer-events:none}

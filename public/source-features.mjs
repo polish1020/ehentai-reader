@@ -35,10 +35,9 @@ export class SourceFeatures {
     this.gallery=gallery;
     root.querySelector('.album-header-actions').innerHTML=`<details class="album-menu"><summary aria-label="更多图册操作" title="更多操作">${icon('more')}</summary><div class="album-menu-panel"><button type="button" data-feature="gallery-tag-list" aria-label="查看图册标签">${icon('tag')}图册标签</button><button type="button" data-feature="community">${icon('comment')}评分与评论</button><button type="button" data-feature="downloads">${icon('download')}下载</button><button type="button" data-feature="gallery-tags">${icon('tag')}标签操作</button><button type="button" data-action="copy-gallery-link">${icon('copy')}复制图册链接</button><button type="button" data-action="gallery-debug">${icon('info')}查看调试信息</button></div></details>`;
   }
-  modal(title,body,{sheet=false}={}) {
+  modal(title,body) {
     this.clearImageExport();
     this.sequence++;
-    this.dialog.classList.toggle('tag-sheet',sheet);
     this.dialog.innerHTML=`<div class="dialog-header"><h2>${esc(title)}</h2><button type="button" class="icon-button" data-feature="close" aria-label="关闭">${icon('close')}</button></div><div class="feature-body">${body}<p class="feature-status" role="status"></p></div>`;
     if(!this.dialog.open)this.dialog.showModal();this.dialog.scrollTop=0;
     return this.sequence;
@@ -115,7 +114,7 @@ export class SourceFeatures {
   }
   openGalleryTagList() {
     const tags=this.gallery.tags||[];
-    this.modal(`图册标签 · ${tags.length}`,`<div class="gallery-tag-list chips">${tags.map(tag=>`<button type="button" class="chip" data-search-tag="${esc(tag)}">${esc(tag)}</button>`).join('')||'<p class="feature-note">这个图册暂无标签。</p>'}</div>`,{sheet:true});
+    this.modal(`图册标签 · ${tags.length}`,`<div class="gallery-tag-list chips">${tags.map(tag=>`<button type="button" class="chip" data-search-tag="${esc(tag)}">${esc(tag)}</button>`).join('')||'<p class="feature-note">这个图册暂无标签。</p>'}</div>`);
   }
   async openCommunity() {
     const gallery=this.gallery,sequence=this.modal('评分与评论','<p class="loading">正在读取评论…</p>');
