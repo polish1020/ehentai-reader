@@ -30,7 +30,8 @@
 .gallery-summary-copy{min-width:0}
 .gallery-summary-copy .eyebrow{font-size:9px;letter-spacing:1px;line-height:1.6}
 .gallery-summary-copy h2{font:600 20px/1.6 var(--serif);margin:8px 0 10px;overflow-wrap:anywhere}
-.gallery-facts{display:flex;flex-wrap:wrap;gap:5px 12px;font-size:11px;color:var(--muted);line-height:1.8}
+.gallery-facts{display:flex;flex-wrap:wrap;align-items:center;gap:5px 12px;font-size:11px;color:var(--muted);line-height:1.8}
+.gallery-category{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--green);font-size:10px;line-height:1.5;white-space:nowrap}
 .gallery-summary-copy p{font-size:11px;line-height:1.8;color:var(--muted);margin:9px 0 0;overflow-wrap:anywhere}
 .gallery-tags{padding:0 20px 20px}
 .gallery-tags-heading{display:flex;gap:12px;align-items:center;font-size:11px;color:var(--muted);margin-bottom:10px}
