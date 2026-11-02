@@ -360,7 +360,7 @@ function showGalleryDiagnostics() {
   const text=galleryDiagnostics(gallery);
   features.modal('图册调试信息',`<label class="feature-field">链接、ID 与显示状态<textarea class="gallery-debug-data" readonly rows="10">${escape(text)}</textarea></label><button class="outline-button" data-action="copy-gallery-debug">${icon('copy')} 复制调试信息</button>`);
 }
-async function copyGalleryText(text,message) {
+async function copyGalleryText(text,message,{title='复制图册信息'}={}) {
   if(!text)return;
   let copied=false;
   try { await navigator.clipboard.writeText(text);copied=true; } catch {
@@ -371,11 +371,12 @@ async function copyGalleryText(text,message) {
     finally { input.remove();previous?.focus({preventScroll:true}); }
   }
   if(copied)toast(message);
-  else features.modal('复制图册信息',`<label class="feature-field">长按下方内容选择并复制<textarea readonly rows="8">${escape(text)}</textarea></label>`);
+  else features.modal(title,`<label class="feature-field">长按下方内容选择并复制<textarea readonly rows="8">${escape(text)}</textarea></label>`);
 }
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
   back,
   notify:toast,
+  copyOriginalDiagnostics:text=>copyGalleryText(text,'原图调试信息已复制，可以粘贴发给我',{title:'原图加载调试信息'}),
   original:(gallery,index,signal)=>{
     const url=new URL(gallery.pages[index].src,location.origin);url.searchParams.set('quality','original');
     return requestJSON(url,{signal});

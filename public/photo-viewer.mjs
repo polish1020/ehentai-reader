@@ -2,6 +2,8 @@ import {icon} from './icons.mjs';
 import {ReaderPreloader,preloadNeighbors} from './reader-preload.mjs';
 import {PhotoGestures} from './photo-gestures.mjs';
 import {ThumbnailView} from './photo-thumbnails.mjs';
+import {originalFailureReport} from './original-diagnostics.mjs';
+import {imageCacheName} from './image-cache.mjs';
 
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export class PhotoViewer {
@@ -132,6 +134,11 @@ export class PhotoViewer {
     const previous=this.originals.get(index);
     if(previous?.status==='loading'){previous.cancelled=true;previous.controller.abort();return;}
     if(previous?.status==='ready')return;
+    if(previous?.diagnostics) {
+      // Start clipboard access in the retry click's user gesture, before awaiting requests.
+      try {Promise.resolve(this.callbacks.copyOriginalDiagnostics?.(JSON.stringify(previous.diagnostics,null,2))).catch(()=>this.callbacks.notify?.('调试信息复制失败，本次仍会重试原图'));}
+      catch {this.callbacks.notify?.('调试信息复制失败，本次仍会重试原图');}
+    }
     previous?.indicator.remove();
     const indicator=document.createElement('div');indicator.className='photo-original-status';indicator.innerHTML='<span role="status"></span><span aria-hidden="true"></span>';
     this.track.querySelector(`[data-photo-slide="${index}"]`).append(indicator);
@@ -145,15 +152,17 @@ export class PhotoViewer {
       if(!current())return;
       if(controller.signal.aborted)throw new DOMException('Original image cancelled','AbortError');
       clearTimeout(timeout);timeout=setTimeout(()=>controller.abort(),120000);
-      state.phase='image';state.info=info;if(this.index===index)this.paintOriginal();
+      state.phase='image';state.info=info;state.addressAt=Date.now();if(this.index===index)this.paintOriginal();
       const url=new URL(src);
       if(url.protocol!=='https:')throw new Error('原图地址无效');
+      state.sourceURL=url;
       const preview=new Image();preview.referrerPolicy='no-referrer';preview.fetchPriority='high';
+      const snapshot=()=>{state.image={complete:preview.complete,width:preview.naturalWidth,height:preview.naturalHeight};};
       await new Promise((resolve,reject)=>{
         const cleanup=()=>{preview.onload=null;preview.onerror=null;controller.signal.removeEventListener('abort',abort);};
-        const abort=()=>{cleanup();preview.removeAttribute('src');reject(new DOMException('Original image cancelled','AbortError'));};
-        preview.onload=()=>{cleanup();resolve();};
-        preview.onerror=()=>{cleanup();reject(new Error('原图加载失败，请重试'));};
+        const abort=()=>{snapshot();cleanup();preview.removeAttribute('src');reject(new DOMException('Original image cancelled','AbortError'));};
+        preview.onload=()=>{snapshot();state.loadedAt=Date.now();cleanup();resolve();};
+        preview.onerror=()=>{snapshot();cleanup();reject(new Error('原图加载失败，请重试'));};
         controller.signal.addEventListener('abort',abort,{once:true});
         if(controller.signal.aborted)return abort();
         preview.src=url.href;
@@ -174,8 +183,21 @@ export class PhotoViewer {
       if(this.index===index){this.paintOriginal();this.callbacks.notify?.('已切换原图，长按图片可保存');}
     } catch(error) {
       if(!current())return;
+      state.failedAt=Date.now();
       state.error=state.cancelled?'已取消原图加载':error.name==='AbortError'?(state.phase==='address'?'获取原图地址超时，请重试':'原图加载超时，请重试或稍后再试'):error.message;
       if(state.cancelled)this.originals.delete(index);else state.status='error';
+      if(!state.cancelled) {
+        state.diagnostics=originalFailureReport({gallery,index,immersive:this.immersive,state,error});
+        const report=state.diagnostics;
+        Promise.resolve().then(async()=>{
+          const names=await globalThis.caches?.keys();
+          report.serviceWorker.shellCaches=(names||[]).filter(name=>/^yijing-live-(?:[a-f\d]{12}|v1)$/.test(name));
+          if(!names||!state.sourceURL)return;
+          const scope=new URL(gallery.pages[index].src,location.origin).searchParams.get('scope'),cacheName=imageCacheName(gallery.source,scope);
+          const cached=names.includes(cacheName)?await (await caches.open(cacheName)).match(state.sourceURL.href):null;
+          report.serviceWorker.imageCached=!!cached;report.serviceWorker.imageResponseType=cached?.type||null;
+        }).catch(()=>{});
+      }
       if(this.index===index){this.paintOriginal();this.callbacks.notify?.(state.error);}
     } finally {clearTimeout(timeout);clearInterval(ticker);if(state.status!=='error')indicator.remove();}
   }
