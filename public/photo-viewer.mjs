@@ -7,7 +7,8 @@ const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 export class PhotoViewer {
   constructor(root,callbacks) {
     this.root=root;this.callbacks=callbacks;this.index=0;this.gallery=null;
-    root.innerHTML=`<header class="photo-header viewer-header"><button class="photo-back icon-button" data-photo-action="back" aria-label="返回图册" title="返回图册">${icon('back')}</button><div class="viewer-heading"><b class="photo-title viewer-title"></b></div><button class="photo-reading icon-button" data-photo-action="continuous" aria-label="切换连续模式" title="切换连续模式">${icon('list')}</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页，双击或双指缩放"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div><div class="photo-pagination"><span class="photo-count" role="status" aria-label="阅读页码"></span></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 双击缩放 · 下滑返回图集</span>`;
+    root.innerHTML=`<header class="photo-header viewer-header"><button class="photo-back icon-button" data-photo-action="back" aria-label="返回图册" title="返回图册">${icon('back')}</button><div class="viewer-heading"><b class="photo-title viewer-title"></b></div><button class="photo-reading icon-button" data-photo-action="continuous" aria-label="切换连续模式" title="切换连续模式">${icon('list')}</button></header><div class="photo-track" tabindex="0" aria-label="照片，左右滑动翻页，双击或双指缩放"></div><footer class="photo-footer"><div class="photo-strip" aria-label="照片缩略图"></div><div class="photo-pagination"><span class="photo-count" role="status" aria-label="阅读页码"></span><button class="photo-original" data-photo-action="original" hidden></button></div></footer><span class="photo-dismiss-hint">轻点退出全屏 · 双击缩放 · 下滑返回图集</span>`;
+    this.originals=new Map();this.originalButton=root.querySelector('.photo-original');
     this.track=root.querySelector('.photo-track');this.strip=root.querySelector('.photo-strip');this.gestures=new PhotoGestures(this);
     root.addEventListener('click',event=>{
       const thumbnail=event.target.closest('[data-photo-index]');
@@ -16,6 +17,7 @@ export class PhotoViewer {
       if(action==='continuous')return callbacks.continuous();
       if(action==='back')return callbacks.back();
       if(action==='retry')return callbacks.retry();
+      if(action==='original')return this.loadOriginal();
       const retry=event.target.closest('[data-photo-retry]');
       if(retry){const image=this.track.querySelector(`[data-photo-image="${retry.dataset.photoRetry}"]`);const url=new URL(image.dataset.src,location.origin);url.searchParams.set('retry',String(Date.now()));image.src=url.href;retry.remove();return;}
       if(event.target.closest('.photo-slide'))this.gestures.click(event);
@@ -87,12 +89,54 @@ export class PhotoViewer {
     for(const page of preloadNeighbors(index,this.gallery.pages.length))if(this.preloader.loaded.has(page))this.activate(page);
     this.preloader.update(index);
     this.root.querySelector('.photo-count').textContent=`${index+1} / ${this.gallery.pages.length} P`;
+    this.paintOriginal();
     const selected=this.strip.children[index];
     const previous=this.strip.querySelector('[aria-current="true"]');
     if(previous && previous!==selected)previous.setAttribute('aria-current','false');
     selected.setAttribute('aria-current','true');
     this.strip.scrollTo({left:selected.offsetLeft-(this.strip.clientWidth-selected.offsetWidth)/2,behavior:force?'instant':'smooth'});
     this.callbacks.change(this.gallery,index);
+  }
+  paintOriginal() {
+    const state=this.originals.get(this.index),busy=state?.status==='loading',ready=state?.status==='ready';
+    this.originalButton.hidden=!this.gallery||!this.immersive;
+    this.originalButton.disabled=busy||ready;
+    this.originalButton.setAttribute('aria-busy',String(busy));
+    this.originalButton.setAttribute('aria-label',ready?'已显示原图，可长按图片保存':busy?'正在加载原图':'查看原图');
+    this.originalButton.title=ready?'长按图片可保存原图':'仅加载可确认免积分的原图，仍可能消耗图片访问配额';
+    this.originalButton.innerHTML=(busy?'<span class="loading-spinner" aria-hidden="true"></span>':icon('image'))+`<span>${ready?'已是原图':busy?'加载中':'查看原图'}</span>`;
+  }
+  async loadOriginal() {
+    const gallery=this.gallery,index=this.index;
+    if(!gallery||this.originals.has(index))return;
+    const controller=new AbortController(),state={status:'loading',controller};
+    this.originals.set(index,state);this.paintOriginal();this.track.focus({preventScroll:true});
+    const timeout=setTimeout(()=>controller.abort(),120000);
+    const current=()=>this.gallery===gallery&&this.originals.get(index)===state;
+    try {
+      const {src}=await this.callbacks.original(gallery,index,controller.signal);
+      if(!current()||controller.signal.aborted)return;
+      const url=new URL(src);
+      if(url.protocol!=='https:')throw new Error('原图地址无效');
+      const preview=new Image();preview.referrerPolicy='no-referrer';preview.fetchPriority='high';
+      await new Promise((resolve,reject)=>{
+        const cleanup=()=>{preview.onload=null;preview.onerror=null;controller.signal.removeEventListener('abort',abort);};
+        const abort=()=>{cleanup();preview.removeAttribute('src');reject(new DOMException('Original image cancelled','AbortError'));};
+        preview.onload=()=>{cleanup();resolve();};
+        preview.onerror=()=>{cleanup();reject(new Error('原图加载失败，请重试'));};
+        controller.signal.addEventListener('abort',abort,{once:true});
+        if(controller.signal.aborted)return abort();
+        preview.src=url.href;
+      });
+      if(!current())return;
+      const image=this.track.querySelector(`[data-photo-image="${index}"]`);
+      image.referrerPolicy='no-referrer';image.src=url.href;image.dataset.original='true';state.status='ready';
+      if(this.index===index){this.paintOriginal();this.callbacks.notify?.('已切换原图，长按图片可保存');}
+    } catch(error) {
+      if(!current())return;
+      this.originals.delete(index);
+      if(this.index===index){this.paintOriginal();this.callbacks.notify?.(error.name==='AbortError'?'原图加载超时，请重试':error.message);}
+    } finally {clearTimeout(timeout);}
   }
   go(index) {
     if(!this.gallery)return;
@@ -104,6 +148,9 @@ export class PhotoViewer {
     this.track.style.transition='transform .22s ease';this.track.style.transform='';
   }
   hide() {
+    const originals=this.originals;this.originals=new Map();
+    for(const state of originals.values())state.controller.abort();
+    this.originalButton.hidden=true;
     this.gestures.close();
     this.preloader?.close();this.preloader=null;this.thumbnails?.close();this.thumbnails=null;
     cancelAnimationFrame(this.frame);this.gallery=null;this.root.hidden=true;this.track.style.transform='';this.track.style.transition='';this.track.replaceChildren();this.strip.replaceChildren();

@@ -18,6 +18,10 @@ export class PhotoGestures {
     this.track.addEventListener('pointerup',event=>this.up(event));
     this.track.addEventListener('pointercancel',()=>this.cancel());
     this.track.addEventListener('dblclick',event=>event.preventDefault());
+    this.track.addEventListener('contextmenu',()=>{
+      clearTimeout(this.tapTimer);this.tapTimer=null;this.lastTap=null;
+      this.ignoreNativeClickUntil=Date.now()+1000;this.cancel();
+    });
     const viewport=window.visualViewport,syncViewport=()=>{this.track.style.touchAction=(viewport?.scale||1)>1.05?'pan-x pinch-zoom':'';if((viewport?.scale||1)>1.05)this.cancel();};
     viewport?.addEventListener('resize',syncViewport);syncViewport();
   }
@@ -56,7 +60,6 @@ export class PhotoGestures {
     if(!this.viewer.gallery||event.target.closest('button')||event.button>0)return;
     if((window.visualViewport?.scale||1)>1.05)return;
     this.pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
-    this.track.setPointerCapture(event.pointerId);
     if(this.pointers.size===2){
       clearTimeout(this.tapTimer);this.lastTap=null;this.multitouch=true;this.drag=null;
       this.viewer.ignoreClickUntil=Date.now()+500;this.viewer.resetDrag();
@@ -80,6 +83,7 @@ export class PhotoGestures {
     const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
     if(!drag.mode&&Math.hypot(dx,dy)>8)drag.mode=Math.abs(dx)>=Math.abs(dy)?'page':'dismiss';
     if(!drag.mode)return;
+    if(Math.hypot(dx,dy)>8&&!this.track.hasPointerCapture(event.pointerId))this.track.setPointerCapture(event.pointerId);
     if(Math.hypot(dx,dy)>8){this.viewer.ignoreClickUntil=Date.now()+500;clearTimeout(this.tapTimer);this.lastTap=null;}
     if(drag.mode==='pan')this.apply({...drag.view,x:drag.view.x+dx,y:drag.view.y+dy});
     if(drag.mode==='page'){
@@ -98,7 +102,11 @@ export class PhotoGestures {
     const drag=this.drag;this.drag=null;if(!drag)return;
     const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
     this.viewer.resetDrag();this.track.style.scrollSnapType='';this.track.style.scrollBehavior='';
-    if(Math.hypot(dx,dy)<8){this.tap(event,true);this.ignoreNativeClickUntil=Date.now()+400;}
+    if(Math.hypot(dx,dy)<8){
+      if(performance.now()-drag.time<500)this.tap(event,true);
+      else{clearTimeout(this.tapTimer);this.tapTimer=null;this.lastTap=null;}
+      this.ignoreNativeClickUntil=Date.now()+500;
+    }
     if(drag.mode==='page'){
       const quick=Math.abs(dx)>20&&Math.abs(dx)/Math.max(1,performance.now()-drag.time)>.45;
       const moved=Math.abs(dx)>Math.min(70,this.track.clientWidth*.2)||quick;

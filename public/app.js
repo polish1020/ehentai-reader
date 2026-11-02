@@ -375,6 +375,11 @@ async function copyGalleryText(text,message) {
 }
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
   back,
+  notify:toast,
+  original:(gallery,index,signal)=>{
+    const url=new URL(gallery.pages[index].src,location.origin);url.searchParams.set('quality','original');
+    return requestJSON(url,{signal});
+  },
   dismiss:()=>{
     if(entry.photoOrigin==='reader')return back();
     remember();
