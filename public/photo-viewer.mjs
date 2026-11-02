@@ -113,8 +113,14 @@ export class PhotoViewer {
   }
   paintOriginal() {
     const state=this.originals.get(this.index),busy=state?.status==='loading',ready=state?.status==='ready',failed=state?.status==='error';
-    this.root.dataset.originalStatus=busy||failed?'visible':'';
-    this.originalButton.hidden=!this.gallery;
+    const enabled=this.callbacks.originalEnabled?.()===true;
+    this.root.dataset.originalStatus=enabled&&(busy||failed)?'visible':'';
+    this.originalButton.hidden=!this.gallery||!enabled;
+    for(const attempt of this.originals.values()) {
+      attempt.indicator.hidden=!enabled;
+      if(!enabled&&attempt.status==='loading'){attempt.cancelled=true;attempt.controller.abort();}
+    }
+    if(!enabled)return;
     this.originalButton.disabled=ready;
     this.originalButton.setAttribute('aria-busy',String(busy));
     this.originalButton.setAttribute('aria-label',ready?'已显示原图，可长按图片保存':busy?'取消原图加载':failed?'重试原图':'查看原图');
@@ -130,7 +136,7 @@ export class PhotoViewer {
   }
   async loadOriginal() {
     const gallery=this.gallery,index=this.index;
-    if(!gallery)return;
+    if(!gallery||this.callbacks.originalEnabled?.()!==true)return;
     const previous=this.originals.get(index);
     if(previous?.status==='loading'){previous.cancelled=true;previous.controller.abort();return;}
     if(previous?.status==='ready')return;

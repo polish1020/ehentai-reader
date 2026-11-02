@@ -34,6 +34,7 @@ state.searchHistory = cleanSearchHistory(state.searchHistory);
 state.mode = 'scroll';
 state.direction = state.direction === 'rtl' ? 'rtl' : 'ltr';
 state.theme = ['light','dark','system'].includes(state.theme) ? state.theme : 'system';
+state.showOriginal = state.showOriginal === true;
 state.categories = Array.isArray(state.categories) ? categories.map(category => category.name).filter(name => state.categories.includes(name)) : categories.map(category => category.name);
 state.source = state.source === 'exhentai' ? 'exhentai' : 'e-hentai';
 state.tagPreferences = Array.isArray(state.tagPreferences) ? state.tagPreferences.filter(pref=>pref&&typeof pref.tag==='string') : [];
@@ -376,6 +377,7 @@ async function copyGalleryText(text,message,{title='复制图册信息'}={}) {
 const photoViewer = new PhotoViewer($('#photo-viewer'),{
   back,
   notify:toast,
+  originalEnabled:()=>state.showOriginal,
   copyOriginalDiagnostics:text=>copyGalleryText(text,'原图调试信息已复制，可以粘贴发给我',{title:'原图加载调试信息'}),
   original:(gallery,index,signal)=>{
     const url=new URL(gallery.pages[index].src,location.origin);url.searchParams.set('quality','original');
@@ -862,6 +864,7 @@ function settings() {
   $('#category-options').innerHTML = categories.map(category => `<label class="category-option"><input type="checkbox" name="category" value="${escape(category.name)}" ${state.categories.includes(category.name) ? 'checked' : ''}><span>${escape(category.name)}<small>${escape(category.label)}</small></span></label>`).join('');
   categoryCount();
   $('#theme-setting').value = state.theme;
+  const originalToggle=$('#show-original-setting');if(originalToggle)originalToggle.checked=state.showOriginal;
   $('#settings-dialog').showModal();
   $('#settings-dialog').scrollTop = 0;
 }
@@ -929,6 +932,7 @@ document.addEventListener('change', event => {
   const id = event.target.id;
   if (id === 'sort') { list.sort = event.target.value; renderResults(); remember(); }
   if (id === 'theme-setting') { state.theme = event.target.value; save(); theme(); }
+  if (id === 'show-original-setting') { state.showOriginal = event.target.checked; save(); photoViewer.paintOriginal(); }
 });
 document.addEventListener('keydown', event => {
   if(event.key==='Escape'&&$('.album-menu[open]')){event.preventDefault();const menu=$('.album-menu');menu.open=false;menu.querySelector('summary').focus({preventScroll:true});return;}

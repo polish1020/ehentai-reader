@@ -41,6 +41,8 @@
       <div class="category-apply"><span id="category-count" role="status"></span><button class="primary-button" data-action="apply-categories">应用分类</button></div>
     </fieldset>
     <label class="setting-row">界面主题<select id="theme-setting"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label>
+    <label class="setting-row original-setting">显示原图按钮<input id="show-original-setting" class="setting-switch" type="checkbox" role="switch" aria-describedby="original-setting-help"></label>
+    <p id="original-setting-help" class="setting-help original-setting-help">原图文件较大，加载可能较慢，按需开启。</p>
     <section class="image-cache-settings" aria-labelledby="image-cache-title"><h3 id="image-cache-title">本地图片缓存</h3><p class="setting-help">缓存已查看的图片，加快再次打开。</p><div class="source-actions"><div class="cache-statistics" role="status"><span id="image-cache-count">正在统计…</span><span id="image-cache-usage">正在统计占用空间…</span></div><button class="outline-button" data-action="clear-image-cache">清除图片缓存</button></div></section>
     <button class="danger-button" data-action="clear-history">清除本机阅读记录</button>
     <section class="source-settings" aria-labelledby="source-settings-title">
