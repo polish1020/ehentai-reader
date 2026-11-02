@@ -99,7 +99,7 @@ export class PhotoViewer {
   }
   paintOriginal() {
     const state=this.originals.get(this.index),busy=state?.status==='loading',ready=state?.status==='ready';
-    this.originalButton.hidden=!this.gallery||!this.immersive;
+    this.originalButton.hidden=!this.gallery;
     this.originalButton.disabled=busy||ready;
     this.originalButton.setAttribute('aria-busy',String(busy));
     this.originalButton.setAttribute('aria-label',ready?'已显示原图，可长按图片保存':busy?'正在加载原图':'查看原图');
