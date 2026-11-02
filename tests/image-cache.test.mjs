@@ -71,3 +71,19 @@ test('storage usage identifies cache-only measurements, labels whole-site estima
  assert.equal(await cacheStorageUsage({estimate:async()=>({usage:NaN})}),null);
  assert.equal(formatBytes(1024**2*1.5),'1.5 MB');assert.equal(formatBytes(0),'0 B');
 });
+
+test('a stalled cache write cannot block image display and a simultaneous image reuses the same response',async t=>{
+  const storage=cacheStorage(t),open=storage.open;let release,started;const blocked=new Promise(resolve=>{release=resolve;});
+  const writingStarted=new Promise(resolve=>{started=resolve;});
+  storage.open=async name=>{const cache=await open(name),put=cache.put;cache.put=async(...args)=>{started();await blocked;return put(...args);};return cache;};
+  const writes=[];let calls=0;
+  const request=new Request('https://images.example/large-original.jpg');
+  const fetchImage=async()=>{calls++;return new Response('original bytes');};
+  const first=loadCachedImage(request,{source:'e-hentai'},fetchImage,promise=>writes.push(promise));
+  await writingStarted;
+  assert.equal(await (await first).text(),'original bytes');
+  assert.equal(await (await loadCachedImage(request,{source:'e-hentai'},fetchImage)).text(),'original bytes');
+  assert.equal(calls,1);assert.equal(writes.length,1);
+  release();await Promise.all(writes);
+  assert.equal(await (await (await caches.open(imageCacheName('e-hentai'))).match(request)).text(),'original bytes');
+});

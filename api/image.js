@@ -7,8 +7,8 @@ export async function GET(request) {
     const context=requestSource(request);
     if(params.get('quality')==='original') {
       Object.assign(context,requireSession(request),{account:true});
-      const src=await resolveOriginalImage(params.get('gid'),params.get('token'),params.get('page'),context);
-      return Response.json({src},{headers:{'Cache-Control':'private, no-store','Vary':'Cookie'}});
+      const original=await resolveOriginalImage(params.get('gid'),params.get('token'),params.get('page'),context);
+      return Response.json(original,{headers:{'Cache-Control':'private, no-store','Vary':'Cookie'}});
     }
     const image=await resolveImage(params.get('gid'),params.get('token'),params.get('page'),context);
     return new Response(null,{status:302,headers:{Location:image,'Cache-Control':'private, max-age=300','Referrer-Policy':'no-referrer',...(context.source === 'exhentai' ? {Vary:'Cookie'} : {})}});

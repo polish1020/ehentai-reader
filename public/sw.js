@@ -27,7 +27,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if(event.request.method!=='GET')return;
   if(event.request.destination==='image' && /^https?:$/.test(url.protocol)){
-    event.respondWith(imageContext(event,url).then(context=>loadCachedImage(event.request,context)).catch(()=>fetch(event.request)));
+    event.respondWith(imageContext(event,url).then(context=>loadCachedImage(event.request,context,fetch,writing=>event.waitUntil(writing))).catch(()=>fetch(event.request)));
     return;
   }
   if(url.origin!==self.location.origin || url.pathname.startsWith('/api/'))return;

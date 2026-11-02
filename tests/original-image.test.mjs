@@ -23,14 +23,14 @@ for(const [source,host,path] of [['e-hentai','e-hentai.org','/fullimg.php?gid=1&
       assert.equal(target.hostname,host);
       assert.match(options.headers.Cookie,/ipb_pass_hash=fixture-pass/);
       if(target.pathname.startsWith('/g/'))return new Response(gallery(host));
-      if(target.pathname.startsWith('/s/'))return new Response(`<img id="img" src="https://images.hath.network/preview.webp"><a href="${path}">Download original 6000 x 8000</a>`);
+      if(target.pathname.startsWith('/s/'))return new Response(`<img id="img" src="https://images.hath.network/preview.webp"><a href="${path}">Download original 6000 x 8000 18.05 MiB</a>`);
       assert.equal(target.pathname,new URL(path,`https://${host}`).pathname);
       return new Response(null,{status:302,headers:{Location:'https://images.hath.network/original.jpg?key=temporary'}});
     });
     const response=await GET(request(source));
     assert.equal(response.status,200);
     assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(response.headers.get('vary'),'Cookie');
-    assert.deepEqual(await response.json(),{src:'https://images.hath.network/original.jpg?key=temporary'});
+    assert.deepEqual(await response.json(),{src:'https://images.hath.network/original.jpg?key=temporary',width:6000,height:8000,size:'18.05 MiB'});
     assert.equal(calls.length,3);
   });
 }

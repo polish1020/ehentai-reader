@@ -55,10 +55,7 @@ export class PhotoViewer {
       this.hide();this.gallery=gallery;this.root.hidden=false;this.target=null;
       this.track.innerHTML=gallery.pages.map((page,index)=>`<div class="photo-slide" data-photo-slide="${index}"><span aria-hidden="true">${index+1}</span><img data-photo-image="${index}" data-src="${escape(page.src)}" alt="${escape(page.alt)}" decoding="async" draggable="false"></div>`).join('');
       this.strip.innerHTML=gallery.pages.map((_,index)=>`<button class="photo-film" data-photo-index="${index}" aria-label="查看第 ${index+1} 张照片"><span class="photo-thumb" data-thumb="${index}"></span></button>`).join('');
-      this.track.querySelectorAll('img').forEach(image=>{
-        image.onload=()=>{image.parentElement.dataset.loaded='true';delete image.parentElement.dataset.failed;image.parentElement.querySelector('.photo-image-retry')?.remove();this.preloader?.markLoaded(Number(image.dataset.photoImage),{width:image.naturalWidth,height:image.naturalHeight});};
-        image.onerror=()=>{image.parentElement.dataset.failed='true';if(image.parentElement.querySelector('.photo-image-retry'))return;const button=document.createElement('button');button.className='photo-image-retry';button.dataset.photoRetry=image.dataset.photoImage;button.textContent='图片加载失败，轻点重试';image.parentElement.append(button);};
-      });
+      this.track.querySelectorAll('img').forEach(image=>this.watchImage(image));
       this.preloader=new ReaderPreloader(gallery.pages.length,(index,signal)=>new Promise((resolve,reject)=>{
         const image=new Image();image.fetchPriority='low';image.decoding='async';
         const cleanup=()=>{image.onload=null;image.onerror=null;signal.removeEventListener('abort',abort);};
@@ -82,6 +79,21 @@ export class PhotoViewer {
     const image=this.track.querySelector(`[data-photo-image="${index}"]`);
     if(image&&!image.hasAttribute('src')){image.fetchPriority=index===this.index?'high':'low';image.src=image.dataset.src;}
   }
+  imageLoaded(image) {
+    if(!image.parentElement)return;
+    image.parentElement.dataset.loaded='true';delete image.parentElement.dataset.failed;
+    image.parentElement.querySelector('.photo-image-retry')?.remove();
+    this.preloader?.markLoaded(Number(image.dataset.photoImage),{width:image.naturalWidth,height:image.naturalHeight});
+  }
+  watchImage(image) {
+    image.onload=()=>this.imageLoaded(image);
+    image.onerror=()=>{
+      if(!image.parentElement)return;
+      image.parentElement.dataset.failed='true';
+      if(image.parentElement.querySelector('.photo-image-retry'))return;
+      const button=document.createElement('button');button.className='photo-image-retry';button.dataset.photoRetry=image.dataset.photoImage;button.textContent='图片加载失败，轻点重试';image.parentElement.append(button);
+    };
+  }
   select(index,force=false) {
     if(!this.gallery || index===this.index&&!force)return;
     if(index!==this.index)this.gestures.reset();
@@ -98,24 +110,42 @@ export class PhotoViewer {
     this.callbacks.change(this.gallery,index);
   }
   paintOriginal() {
-    const state=this.originals.get(this.index),busy=state?.status==='loading',ready=state?.status==='ready';
+    const state=this.originals.get(this.index),busy=state?.status==='loading',ready=state?.status==='ready',failed=state?.status==='error';
+    this.root.dataset.originalStatus=busy||failed?'visible':'';
     this.originalButton.hidden=!this.gallery;
-    this.originalButton.disabled=busy||ready;
+    this.originalButton.disabled=ready;
     this.originalButton.setAttribute('aria-busy',String(busy));
-    this.originalButton.setAttribute('aria-label',ready?'已显示原图，可长按图片保存':busy?'正在加载原图':'查看原图');
-    this.originalButton.title=ready?'长按图片可保存原图':'仅加载可确认免积分的原图，仍可能消耗图片访问配额';
-    this.originalButton.innerHTML=(busy?'<span class="loading-spinner" aria-hidden="true"></span>':icon('image'))+`<span>${ready?'已是原图':busy?'加载中':'查看原图'}</span>`;
+    this.originalButton.setAttribute('aria-label',ready?'已显示原图，可长按图片保存':busy?'取消原图加载':failed?'重试原图':'查看原图');
+    this.originalButton.title=ready?'长按图片可保存原图':busy?'取消此次原图加载':'仅加载可确认免积分的原图，仍可能消耗图片访问配额';
+    this.originalButton.innerHTML=(busy?'<span class="loading-spinner" aria-hidden="true"></span>':icon('image'))+`<span>${ready?'已是原图':busy?'取消加载':failed?'重试原图':'查看原图'}</span>`;
+    if(busy) {
+      const dimensions=state.info?.width&&state.info?.height?`${state.info.width} × ${state.info.height}`:'';
+      const stage=state.phase==='address'?'正在获取原图地址':state.phase==='decode'?`正在处理原图${dimensions?' · '+dimensions:''}`:`正在加载原图${state.info?.size?' · '+state.info.size:''}`;
+      const label=state.indicator.querySelector('[role=status]');if(label.textContent!==stage)label.textContent=stage;
+      state.indicator.lastElementChild.textContent=` · ${Math.floor((Date.now()-state.started)/1000)}秒`;
+    }
+    if(failed){state.indicator.querySelector('[role=status]').textContent=state.error;state.indicator.lastElementChild.textContent='';}
   }
   async loadOriginal() {
     const gallery=this.gallery,index=this.index;
-    if(!gallery||this.originals.has(index))return;
-    const controller=new AbortController(),state={status:'loading',controller};
+    if(!gallery)return;
+    const previous=this.originals.get(index);
+    if(previous?.status==='loading'){previous.cancelled=true;previous.controller.abort();return;}
+    if(previous?.status==='ready')return;
+    previous?.indicator.remove();
+    const indicator=document.createElement('div');indicator.className='photo-original-status';indicator.innerHTML='<span role="status"></span><span aria-hidden="true"></span>';
+    this.track.querySelector(`[data-photo-slide="${index}"]`).append(indicator);
+    const controller=new AbortController(),state={status:'loading',phase:'address',started:Date.now(),controller,indicator};
     this.originals.set(index,state);this.paintOriginal();this.track.focus({preventScroll:true});
-    const timeout=setTimeout(()=>controller.abort(),120000);
+    let timeout=setTimeout(()=>controller.abort(),30000);
     const current=()=>this.gallery===gallery&&this.originals.get(index)===state;
+    const ticker=setInterval(()=>{if(current()&&this.index===index)this.paintOriginal();},1000);
     try {
-      const {src}=await this.callbacks.original(gallery,index,controller.signal);
-      if(!current()||controller.signal.aborted)return;
+      const {src,...info}=await this.callbacks.original(gallery,index,controller.signal);
+      if(!current())return;
+      if(controller.signal.aborted)throw new DOMException('Original image cancelled','AbortError');
+      clearTimeout(timeout);timeout=setTimeout(()=>controller.abort(),120000);
+      state.phase='image';state.info=info;if(this.index===index)this.paintOriginal();
       const url=new URL(src);
       if(url.protocol!=='https:')throw new Error('原图地址无效');
       const preview=new Image();preview.referrerPolicy='no-referrer';preview.fetchPriority='high';
@@ -129,14 +159,25 @@ export class PhotoViewer {
         preview.src=url.href;
       });
       if(!current())return;
+      state.phase='decode';if(this.index===index)this.paintOriginal();
+      if(preview.decode)await new Promise((resolve,reject)=>{
+        const abort=()=>{preview.removeAttribute('src');reject(new DOMException('Original image cancelled','AbortError'));};
+        controller.signal.addEventListener('abort',abort,{once:true});
+        preview.decode().then(resolve,()=>reject(new Error('原图处理失败，可能超出浏览器支持的尺寸'))).finally(()=>controller.signal.removeEventListener('abort',abort));
+        if(controller.signal.aborted)abort();
+      });
+      if(!current())return;
+      if(controller.signal.aborted)throw new DOMException('Original image cancelled','AbortError');
       const image=this.track.querySelector(`[data-photo-image="${index}"]`);
-      image.referrerPolicy='no-referrer';image.src=url.href;image.dataset.original='true';state.status='ready';
+      for(const attribute of image.attributes)if(!['src','referrerpolicy'].includes(attribute.name))preview.setAttribute(attribute.name,attribute.value);
+      preview.dataset.original='true';this.watchImage(preview);image.replaceWith(preview);this.imageLoaded(preview);state.status='ready';
       if(this.index===index){this.paintOriginal();this.callbacks.notify?.('已切换原图，长按图片可保存');}
     } catch(error) {
       if(!current())return;
-      this.originals.delete(index);
-      if(this.index===index){this.paintOriginal();this.callbacks.notify?.(error.name==='AbortError'?'原图加载超时，请重试':error.message);}
-    } finally {clearTimeout(timeout);}
+      state.error=state.cancelled?'已取消原图加载':error.name==='AbortError'?(state.phase==='address'?'获取原图地址超时，请重试':'原图加载超时，请重试或稍后再试'):error.message;
+      if(state.cancelled)this.originals.delete(index);else state.status='error';
+      if(this.index===index){this.paintOriginal();this.callbacks.notify?.(state.error);}
+    } finally {clearTimeout(timeout);clearInterval(ticker);if(state.status!=='error')indicator.remove();}
   }
   go(index) {
     if(!this.gallery)return;
